@@ -3,7 +3,7 @@ import 'package:zing_zone/main.dart';
 
 void main() {
   testWidgets('Zing Zone shows its four primary navigation tabs', (tester) async {
-    await tester.pumpWidget(const ZingZoneApp());
+    await tester.pumpWidget(const ZingZone());
     expect(find.text('ZING ZONE'), findsOneWidget);
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Store'), findsOneWidget);

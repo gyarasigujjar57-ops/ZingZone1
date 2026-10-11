@@ -60,7 +60,7 @@ class Rewards extends StatelessWidget {
             ? ['No verified ranking yet', 'Badges require server validation']
             : s == 'Points history'
               ? ['No transactions yet']
-              : ['No active offers in preview', 'Coupons after verified rewards integration']),
+              : ['No active offers in preview', 'Coupons after verified rewards integration'])),
     )),
   ]);
 }

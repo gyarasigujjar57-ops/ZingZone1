@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 const navy=Color(0xFF11152B), blue=Color(0xFF4965F5), violet=Color(0xFF7856D9), pink=Color(0xFFEF4F83), muted=Color(0xFF747B8F), line=Color(0xFFE8EAF1), pale=Color(0xFFF6F7FB);
-void main()=>runApp(const ZingZone());
+Future<void> main() async {\n  WidgetsFlutterBinding.ensureInitialized();\n  await Firebase.initializeApp(options: firebaseOptions);\n  runApp(const ZingZone());\n}
 void note(BuildContext c,String s)=>ScaffoldMessenger.of(c).showSnackBar(SnackBar(content:Text(s),behavior:SnackBarBehavior.floating));
 void page(BuildContext c,Widget w)=>Navigator.push(c,MaterialPageRoute(builder:(_)=>w));
 class ZingZone extends StatelessWidget{const ZingZone({super.key});@override Widget build(BuildContext c)=>MaterialApp(title:'Zing Zone',debugShowCheckedModeBanner:false,theme:ThemeData(useMaterial3:true,scaffoldBackgroundColor:pale,colorScheme:ColorScheme.fromSeed(seedColor:blue),appBarTheme:const AppBarTheme(backgroundColor:Colors.white,foregroundColor:navy),navigationBarTheme:const NavigationBarThemeData(backgroundColor:Colors.white,indicatorColor:Color(0xFFE9ECFF))),home:const Welcome());}

@@ -25,7 +25,6 @@ jobs:
         run: flutter create . --platforms=android --org com.gyarasigujjar57
       - name: Configure Firebase Android package and plugin
         run: |
-          cp android/app/google-services.json android/app/google-services.json
           python3 - <<'PY'
           from pathlib import Path
           import re

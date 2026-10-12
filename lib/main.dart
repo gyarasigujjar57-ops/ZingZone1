@@ -361,7 +361,7 @@ class TokenPage extends StatelessWidget {
           const Padding(padding: EdgeInsets.only(top: 12), child: Text('The app cannot create tokens on the device. Only trusted server-side transactions should change this balance.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: muted))),
         ]);
       },
-    )));
+    ));
   }
 }
 class _MembershipFeature extends StatelessWidget {

@@ -311,6 +311,8 @@ class TokenBalanceBadge extends StatelessWidget {
   final VoidCallback onTap;
   const TokenBalanceBadge({super.key, required this.onTap});
   @override Widget build(BuildContext context) {
+    // Widget tests and pre-Firebase preview can render the shell before Firebase initializes.
+    if (Firebase.apps.isEmpty) return IconButton(tooltip: 'Tokens — sign in to view balance', onPressed: onTap, icon: const Icon(Icons.token, color: Color(0xFFB27A18)));
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return IconButton(tooltip: 'Tokens — sign in to view balance', onPressed: onTap, icon: const Icon(Icons.token, color: Color(0xFFB27A18)));
     final entries = FirebaseFirestore.instance.collection('users').doc(user.uid).collection('tokens');

@@ -48,8 +48,6 @@ jobs:
         run: flutter analyze --no-fatal-infos
       - name: Run tests
         run: flutter test
-      - name: Build release APK
-        run: flutter build apk --release
       - name: Prepare CI debug signing key for Firebase fingerprints
         run: |
           mkdir -p "$HOME/.config/.android"
@@ -66,6 +64,8 @@ jobs:
         run: |
           cd android
           ./gradlew signingReport
+      - name: Build release APK
+        run: flutter build apk --release
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

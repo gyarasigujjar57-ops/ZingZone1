@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owns(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Users can read their own profile. Client writes are restricted to safe profile fields.
+    match /users/{uid} {
+      allow read: if owns(uid);
+      allow create: if owns(uid)
+        && request.resource.data.keys().hasOnly(['displayName', 'photoURL', 'language', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['createdAt', 'updatedAt']);
+      allow update: if owns(uid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoURL', 'language', 'updatedAt']);
+      allow delete: if false;
+
+      match /chats/{chatId} {
+        allow read, create, update, delete: if owns(uid);
+      }
+      match /documents/{documentId} {
+        allow read, create, update, delete: if owns(uid);
+      }
+      match /applications/{applicationId} {
+        allow read: if owns(uid);
+        // Application submission/status should be mediated by trusted backend.
+        allow create, update, delete: if false;
+      }
+      match /notifications/{notificationId} {
+        allow read: if owns(uid);
+        allow update: if owns(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow create, delete: if false;
+      }
+      match /wallet/{entryId} {
+        allow read: if owns(uid);
+        // No client can mint or modify wallet entries.
+        allow write: if false;
+      }
+      match /tokens/{entryId} {
+        allow read: if owns(uid);
+        allow write: if false;
+      }
+      match /rewards/{entryId} {
+        allow read: if owns(uid);
+        allow write: if false;
+      }
+    }
+
+    // Default deny for everything not explicitly listed above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -207,7 +207,7 @@ class Welcome extends StatelessWidget {
                           const SizedBox(height: 7),
                           TextButton(
                             onPressed: () => Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const Shell()), (r) => false),
-                            child: const Text('Explore as guest', style: TextStyle(fontWeight: FontWeight.w700)),
+                            child: const Text('Explore app as guest', style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ],
                       ),

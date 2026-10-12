@@ -16,79 +16,218 @@ Future<void> main() async {
 void note(BuildContext c,String s)=>ScaffoldMessenger.of(c).showSnackBar(SnackBar(content:Text(s),behavior:SnackBarBehavior.floating));
 void page(BuildContext c,Widget w)=>Navigator.push(c,MaterialPageRoute(builder:(_)=>w));
 Future<void> signInWithGoogle(BuildContext c) async {try{final googleUser=await GoogleSignIn().signIn();if(googleUser==null)return;final googleAuth=await googleUser.authentication;final credential=GoogleAuthProvider.credential(accessToken:googleAuth.accessToken,idToken:googleAuth.idToken);await FirebaseAuth.instance.signInWithCredential(credential);if(c.mounted)Navigator.pushAndRemoveUntil(c,MaterialPageRoute(builder:(_)=>const Shell()),(r)=>false);}on FirebaseAuthException catch(e){if(c.mounted)note(c,'Google sign-in failed: ${e.message??e.code}');}catch(_){if(c.mounted)note(c,'Google sign-in complete nahi hua. Firebase Console mein Google provider aur Android SHA/OAuth setup check karo.');}}
-class ZingZone extends StatelessWidget{const ZingZone({super.key});@override Widget build(BuildContext c)=>MaterialApp(title:'Zing Zone',debugShowCheckedModeBanner:false,theme:ThemeData(useMaterial3:true,scaffoldBackgroundColor:pale,colorScheme:ColorScheme.fromSeed(seedColor:blue),appBarTheme:const AppBarTheme(backgroundColor:Colors.white,foregroundColor:navy),navigationBarTheme:const NavigationBarThemeData(backgroundColor:Colors.white,indicatorColor:Color(0xFFE9ECFF))),home:const Welcome());}
+class ZingZone extends StatelessWidget {
+  const ZingZone({super.key});
+  @override
+  Widget build(BuildContext c) => MaterialApp(
+    title: 'Zing Zone',
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(
+      useMaterial3: true,
+      scaffoldBackgroundColor: Colors.white,
+      colorScheme: ColorScheme.fromSeed(seedColor: blue, brightness: Brightness.light),
+      splashFactory: InkSparkle.splashFactory,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.white,
+        foregroundColor: navy,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: line),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFFF7F8FC),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: const BorderSide(color: blue, width: 1.5)),
+      ),
+      navigationBarTheme: const NavigationBarThemeData(
+        backgroundColor: Colors.white,
+        indicatorColor: Color(0xFFE9ECFF),
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        height: 72,
+        labelTextStyle: WidgetStatePropertyAll(TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+      ),
+    ),
+    home: const Welcome(),
+  );
+}
 class Welcome extends StatelessWidget {
   const Welcome({super.key});
   @override
   Widget build(BuildContext c) => Scaffold(
-    body: Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF101833), Color(0xFF263F9D), Color(0xFF6848B8)],
+    backgroundColor: Colors.white,
+    body: Stack(
+      children: [
+        Positioned(
+          top: -100, right: -100,
+          child: Container(
+            width: 310, height: 310,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [Color(0x553D72FF), Color(0x003D72FF)]),
+            ),
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.all_inclusive, color: Colors.white, size: 34),
-                      SizedBox(width: 10),
-                      Text('ZING ZONE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 20)),
-                    ],
-                  ),
-                  const SizedBox(height: 34),
-                  const Text('Welcome to Zing Zone', textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 27, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 8),
-                  const Text('Your AI assistant for everyday tasks and public services.',
-                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, height: 1.5)),
-                  const SizedBox(height: 28),
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+        Positioned(
+          bottom: 20, left: -120,
+          child: Container(
+            width: 300, height: 300,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [Color(0x337E5BFF), Color(0x007E5BFF)]),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text('GET STARTED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, color: navy)),
-                        const SizedBox(height: 14),
-                        OutlinedButton.icon(
-                          onPressed: () => signInWithGoogle(c),
-                          icon: const Icon(Icons.g_mobiledata, size: 28),
-                          label: const Text('Continue with Google'),
-                          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), foregroundColor: navy),
+                        Container(
+                          width: 46, height: 46,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft, end: Alignment.bottomRight,
+                              colors: [Color(0xFF3E75FF), Color(0xFF7856D9)],
+                            ),
+                            boxShadow: const [BoxShadow(color: Color(0x333E75FF), blurRadius: 22, offset: Offset(0, 8))],
+                          ),
+                          child: const Icon(Icons.all_inclusive_rounded, color: Colors.white, size: 29),
                         ),
-                        const SizedBox(height: 10),
-                        FilledButton.icon(
-                          onPressed: () => page(c, const MobileLogin()),
-                          icon: const Icon(Icons.phone_android),
-                          label: const Text('Continue with mobile'),
-                          style: FilledButton.styleFrom(backgroundColor: blue, minimumSize: const Size.fromHeight(50)),
-                        ),
-                        const SizedBox(height: 4),
-                        TextButton(
-                          onPressed: () => Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const Shell()), (r) => false),
-                          child: const Text('Explore app as guest'),
+                        const SizedBox(width: 11),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('ZING ZONE', style: TextStyle(color: navy, fontWeight: FontWeight.w900, letterSpacing: 2.2, fontSize: 18)),
+                            SizedBox(height: 2),
+                            Text('YOUR EVERYDAY AI WORKSPACE', style: TextStyle(color: muted, fontWeight: FontWeight.w700, letterSpacing: 1.05, fontSize: 8)),
+                          ],
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 38),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F4FF),
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: const Color(0xFFDDE6FF)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.auto_awesome, size: 15, color: blue),
+                          SizedBox(width: 7),
+                          Text('ONE WORKSPACE. MORE POSSIBILITIES.', style: TextStyle(color: blue, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Your next task,\na smarter way.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: navy, fontSize: 37, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -1.3),
+                    ),
+                    const SizedBox(height: 13),
+                    const Text(
+                      'A personal AI workspace for everyday questions, documents and public-service guidance.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: muted, height: 1.6, fontSize: 14),
+                    ),
+                    const SizedBox(height: 26),
+                    Container(
+                      padding: const EdgeInsets.all(17),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(color: const Color(0xFFE6EAF5)),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x0D263D78), blurRadius: 32, offset: Offset(0, 15)),
+                          BoxShadow(color: Color(0x0A4D70FF), blurRadius: 12, spreadRadius: 1),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('GET STARTED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.4, color: navy, fontSize: 11)),
+                          const SizedBox(height: 15),
+                          OutlinedButton.icon(
+                            onPressed: () => signInWithGoogle(c),
+                            icon: const Icon(Icons.g_mobiledata_rounded, size: 29),
+                            label: const Text('Continue with Google'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(54),
+                              foregroundColor: navy,
+                              side: const BorderSide(color: Color(0xFFDDE2EE)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          const SizedBox(height: 11),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(17),
+                              gradient: const LinearGradient(colors: [Color(0xFF3568F5), Color(0xFF6955E8)]),
+                              boxShadow: const [BoxShadow(color: Color(0x333E67F5), blurRadius: 18, offset: Offset(0, 7))],
+                            ),
+                            child: FilledButton.icon(
+                              onPressed: () => page(c, const MobileLogin()),
+                              icon: const Icon(Icons.phone_iphone_rounded),
+                              label: const Text('Continue with mobile'),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                minimumSize: const Size.fromHeight(54),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
+                                textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          TextButton(
+                            onPressed: () => Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const Shell()), (r) => false),
+                            child: const Text('Explore as guest', style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.verified_user_outlined, size: 14, color: muted),
+                        SizedBox(width: 6),
+                        Flexible(child: Text('You stay in control of your information and final submissions.', textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 10, height: 1.4))),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+      ],
     ),
   );
 }
@@ -99,7 +238,7 @@ class _PhoneOtpState extends State<PhoneOtp>{final code=TextEditingController();
 class Shell extends StatefulWidget{const Shell({super.key});@override State<Shell> createState()=>_ShellState();}
 class _ShellState extends State<Shell>{int tab=0;@override Widget build(BuildContext c)=>Scaffold(body:IndexedStack(index:tab,children:const[ChatPage(),StorePage(),RewardsPage(),ProfilePage()]),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.chat_bubble_outline),selectedIcon:Icon(Icons.chat_bubble),label:'AI Chat'),NavigationDestination(icon:Icon(Icons.shopping_bag_outlined),selectedIcon:Icon(Icons.shopping_bag),label:'Store'),NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),selectedIcon:Icon(Icons.card_giftcard),label:'Rewards'),NavigationDestination(icon:Icon(Icons.person_outline),selectedIcon:Icon(Icons.person),label:'Profile')]));}
 class ChatPage extends StatefulWidget{const ChatPage({super.key});@override State<ChatPage> createState()=>_ChatPageState();}
-class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];bool sending=false;@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if(s.isEmpty||sending)return;setState((){msgs.add(['user',s]);sending=true;});input.clear();try{final recent=msgs.where((m)=>m[0]=='user'||m[0]=='ai').toList();final callable=FirebaseFunctions.instanceFor(region:'asia-south1').httpsCallable('askZingAI');final result=await callable.call(<String,dynamic>{'messages':recent.map((m)=>{'role':m[0]=='ai'?'model':'user','text':m[1]}).toList()});final data=result.data;if(data is! Map || data['answer'] is! String || (data['answer'] as String).trim().isEmpty){throw Exception('empty-answer');}if(mounted)setState(()=>msgs.add(['ai',(data['answer'] as String).trim()]));}on FirebaseFunctionsException catch(e){final message=switch(e.code){'unauthenticated'=>'AI chat ke liye pehle Google ya mobile number se sign in karna hoga. Sign-in abhi app mein connect ho raha hai.','failed-precondition'=>'AI backend ka Gemini key abhi configure nahi hua hai.','not-found'=>'AI backend abhi deploy nahi hua hai.','unavailable'=>'AI abhi busy hai. Thodi der baad dobara try karo.','permission-denied'=>'AI request ko permission nahi mili. Backend configuration check karni hogi.',_=>'AI se connect nahi ho paya (${e.code}). Backend setup aur network check karna hoga.'};if(mounted)setState(()=>msgs.add(['ai',message]));}catch(_){if(mounted)setState(()=>msgs.add(['ai','Abhi Zing AI se jawab nahi mila. Internet check karke dobara try karo.']));}finally{if(mounted)setState(()=>sending=false);}}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:(){Navigator.pop(c);if(msgs.isNotEmpty)ChatMemory.history.insert(0,msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));setState(()=>msgs.clear());}),ListTile(leading:const Icon(Icons.history,color:blue),title:const Text('Chat history'),onTap:(){Navigator.pop(c);page(c,const ChatHistory());}),ListTile(leading:const Icon(Icons.drafts_outlined,color:blue),title:const Text('Drafts'),onTap:(){Navigator.pop(c);page(c,const DraftsPage());}),const Divider(),ListTile(leading:const Icon(Icons.settings_outlined,color:blue),title:const Text('Settings'),onTap:(){Navigator.pop(c);page(c,const AppSettingsPage());}),const Spacer(),const Padding(padding:EdgeInsets.all(16),child:Text('Personal AI workspace • Zing Zone',style:TextStyle(fontSize:11,color:muted)))]))),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(15,13,8,12),child:Row(children:[Builder(builder:(ctx)=>IconButton(tooltip:'Open chat drawer',onPressed:()=>Scaffold.of(ctx).openDrawer(),icon:const Icon(Icons.menu_rounded,color:navy,size:26))),Container(width:40,height:40,decoration:BoxDecoration(gradient:const LinearGradient(colors:[blue,violet]),borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.auto_awesome,color:Colors.white)),const SizedBox(width:8),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Zing AI',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:navy)),Text('Your personal assistant',style:TextStyle(fontSize:11,color:muted))])),IconButton(tooltip:'Notifications',onPressed:()=>page(c,const NotificationsPage()),icon:const Icon(Icons.notifications_none,color:navy)),IconButton(tooltip:'Premium',onPressed:()=>page(c,const PremiumPage()),icon:const Icon(Icons.workspace_premium_outlined,color:violet)),TokenBalanceBadge(onTap:()=>page(c,const TokenPage())) ])),const Divider(height:1,color:line),Expanded(child:msgs.isEmpty
+class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];bool sending=false;@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if(s.isEmpty||sending)return;setState((){msgs.add(['user',s]);sending=true;});input.clear();try{final recent=msgs.where((m)=>m[0]=='user'||m[0]=='ai').toList();final callable=FirebaseFunctions.instanceFor(region:'asia-south1').httpsCallable('askZingAI');final result=await callable.call(<String,dynamic>{'messages':recent.map((m)=>{'role':m[0]=='ai'?'model':'user','text':m[1]}).toList()});final data=result.data;if(data is! Map || data['answer'] is! String || (data['answer'] as String).trim().isEmpty){throw Exception('empty-answer');}if(mounted)setState(()=>msgs.add(['ai',(data['answer'] as String).trim()]));}on FirebaseFunctionsException catch(e){final message=switch(e.code){'unauthenticated'=>'AI chat ke liye pehle Google ya mobile number se sign in karo. Guest mode mein live AI chat available nahi hai.','failed-precondition'=>'AI backend ka Gemini key abhi configure nahi hua hai.','not-found'=>'AI backend abhi deploy nahi hua hai.','unavailable'=>'AI abhi busy hai. Thodi der baad dobara try karo.','permission-denied'=>'AI request ko permission nahi mili. Backend configuration check karni hogi.',_=>'AI se connect nahi ho paya (${e.code}). Backend setup aur network check karna hoga.'};if(mounted)setState(()=>msgs.add(['ai',message]));}catch(_){if(mounted)setState(()=>msgs.add(['ai','Abhi Zing AI se jawab nahi mila. Internet check karke dobara try karo.']));}finally{if(mounted)setState(()=>sending=false);}}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:(){Navigator.pop(c);if(msgs.isNotEmpty)ChatMemory.history.insert(0,msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));setState(()=>msgs.clear());}),ListTile(leading:const Icon(Icons.history,color:blue),title:const Text('Chat history'),onTap:(){Navigator.pop(c);page(c,const ChatHistory());}),ListTile(leading:const Icon(Icons.drafts_outlined,color:blue),title:const Text('Drafts'),onTap:(){Navigator.pop(c);page(c,const DraftsPage());}),const Divider(),ListTile(leading:const Icon(Icons.settings_outlined,color:blue),title:const Text('Settings'),onTap:(){Navigator.pop(c);page(c,const AppSettingsPage());}),const Spacer(),const Padding(padding:EdgeInsets.all(16),child:Text('Personal AI workspace • Zing Zone',style:TextStyle(fontSize:11,color:muted)))]))),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(15,13,8,12),child:Row(children:[Builder(builder:(ctx)=>IconButton(tooltip:'Open chat drawer',onPressed:()=>Scaffold.of(ctx).openDrawer(),icon:const Icon(Icons.menu_rounded,color:navy,size:26))),Container(width:40,height:40,decoration:BoxDecoration(gradient:const LinearGradient(colors:[blue,violet]),borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.auto_awesome,color:Colors.white)),const SizedBox(width:8),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Zing AI',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:navy)),Text('Your personal assistant',style:TextStyle(fontSize:11,color:muted))])),IconButton(tooltip:'Notifications',onPressed:()=>page(c,const NotificationsPage()),icon:const Icon(Icons.notifications_none,color:navy)),IconButton(tooltip:'Premium',onPressed:()=>page(c,const PremiumPage()),icon:const Icon(Icons.workspace_premium_outlined,color:violet)),TokenBalanceBadge(onTap:()=>page(c,const TokenPage())) ])),const Divider(height:1,color:line),Expanded(child:msgs.isEmpty
       ? const Center(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 28),

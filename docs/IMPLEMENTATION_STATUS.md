@@ -2,29 +2,26 @@
 
 Last updated: 2026-10-12
 
-## Current app status
-- Flutter UI exists for Welcome, Chat, Store, Rewards, Profile, settings, notifications, Premium, tokens and wallet.
-- The current Chat response is still demo text; this does not yet call the backend.
-- Mobile OTP and Google sign-in UI are not yet connected to real Firebase Authentication.
-- Store catalog/cart/wishlist are currently local/demo data; there is no live merchant catalogue or affiliate attribution yet.
-- Wallet, tokens, rewards and Premium are not live financial services.
-- Operator workspace, customer isolation and official-portal integrations are not yet complete.
+## Current verified repository state
+- Flutter APK build workflow #45 completed successfully for commit `ab32a54ac8368e29e6b00796b4635fa0e80fe4cb`.
+- Chat UI now calls the Firebase callable function `askZingAI` in `asia-south1`.
+- Google Sign-in and phone SMS OTP flows are wired to Firebase Authentication in the Flutter source.
+- These are code integrations only. The live sign-in flows still need device-side testing and correct Firebase/OAuth configuration.
+- The callable AI function source exists under `functions/src/index.ts`, but it has not been confirmed deployed; the Gemini secret has not been confirmed set.
+- Store catalogue/cart/wishlist still use demo/local data. Wallet, tokens, rewards and Premium are not live financial services.
+- Operator workspace, isolated customer sessions, and official portal integrations are not complete.
 
-## Added in this integration step
-- `firestore.rules`: deny-by-default rules with user-scoped reads and no client writes to wallet/token/reward ledgers.
-- `functions/`: authenticated Firebase callable function scaffold for Gemini chat. The API key is intended to be stored as a Firebase Functions secret, never in Flutter source.
-- The Flutter client still needs to call `askZingAI`; creating the function source alone does not activate AI in the app.
-
-## Required setup before live AI works
-1. Deploy Firestore rules.
-2. Set the Gemini key as a Functions secret using the Firebase CLI: `firebase functions:secrets:set GEMINI_API_KEY`. Enter the key only in the CLI prompt, never in chat or GitHub source.
-3. Deploy Cloud Functions. Firebase may require the Blaze billing plan for Cloud Functions deployment; check the project's current billing requirements before enabling billing.
-4. Connect the Flutter Chat UI to the callable function and test with a signed-in account.
-5. Configure Firebase Phone/Google sign-in fully, including OAuth/SHA configuration as required by Android, and test on a real device.
+## Next steps to activate and verify AI
+1. Confirm the Firebase project billing plan and current Cloud Functions deployment requirements before enabling billing. Do not enable billing without understanding potential charges.
+2. Create/get a Gemini API key through the official Google AI Studio / Google AI API process.
+3. Store the key as the Firebase Functions secret `GEMINI_API_KEY`. Never put it in Flutter source, a public GitHub file, or a chat message.
+4. Build and deploy the Functions code and Firestore rules using an authenticated Firebase CLI environment.
+5. Test `askZingAI` from a signed-in Android account. A successful APK build alone does not prove the function is deployed or callable.
+6. Test Phone OTP and Google sign-in on a real Android device; resolve Firebase provider, SHA-1/SHA-256 and OAuth configuration issues if shown.
 
 ## Security and product notes
-- Do not publish open Firestore rules.
-- Never trust client-submitted wallet balances, token balances, rewards, purchases, or payout status.
-- Government form automation must respect portal terms and stop for OTP, CAPTCHA, biometric checks, payments and final legal submission.
-- Real-money rewards, prize pools, ads and payouts require legal and platform-policy review before activation.
-- Passing an APK build is not proof that these live integrations work.
+- The callable function currently requires Firebase Authentication, but App Check enforcement is disabled. Before production, add App Check and abuse/rate-limit controls.
+- Keep Firestore rules restrictive. Never accept client-submitted wallet balances, token balances, reward grants, purchases or payout status as authoritative.
+- Government-form automation must respect portal terms and stop for OTP, CAPTCHA, biometrics, payments and final legal submission.
+- Real-money rewards, prize pools, ads and payouts need legal and platform-policy review before activation.
+- Passing APK build and tests is not proof that all live integrations work.

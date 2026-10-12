@@ -50,6 +50,18 @@ jobs:
         run: flutter test
       - name: Build release APK
         run: flutter build apk --release
+      - name: Prepare CI debug signing key for Firebase fingerprints
+        run: |
+          mkdir -p "$HOME/.config/.android"
+          if [ ! -f "$HOME/.config/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.config/.android/debug.keystore" \
+              -storepass android \
+              -alias AndroidDebugKey \
+              -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
       - name: Print Android signing fingerprints for Firebase setup
         run: |
           cd android

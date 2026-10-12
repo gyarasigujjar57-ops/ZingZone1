@@ -44,6 +44,10 @@ jobs:
           PY
       - name: Get dependencies
         run: flutter pub get
+      - name: Print Android signing fingerprints for Firebase setup
+        run: |
+          cd android
+          ./gradlew signingReport
       - name: Analyze
         run: flutter analyze --no-fatal-infos
       - name: Run tests

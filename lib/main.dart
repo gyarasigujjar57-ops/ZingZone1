@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -241,8 +242,8 @@ class _PhoneOtpState extends State<PhoneOtp>{final code=TextEditingController();
 class Shell extends StatefulWidget{const Shell({super.key});@override State<Shell> createState()=>_ShellState();}
 class _ShellState extends State<Shell>{int tab=0;@override Widget build(BuildContext c)=>Scaffold(body:IndexedStack(index:tab,children:const[ChatPage(),StorePage(),RewardsPage(),ProfilePage()]),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.chat_bubble_outline),selectedIcon:Icon(Icons.chat_bubble),label:'AI Chat'),NavigationDestination(icon:Icon(Icons.shopping_bag_outlined),selectedIcon:Icon(Icons.shopping_bag),label:'Store'),NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),selectedIcon:Icon(Icons.card_giftcard),label:'Rewards'),NavigationDestination(icon:Icon(Icons.person_outline),selectedIcon:Icon(Icons.person),label:'Profile')]));}
 class ChatPage extends StatefulWidget{const ChatPage({super.key});@override State<ChatPage> createState()=>_ChatPageState();}
-class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;bool sending=false;@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if((s.isEmpty&&attachedImage==null)||sending)return;final imageBytes=attachedImage;final userText=s.isEmpty?'इस तस्वीर/दस्तावेज़ को पढ़ो और समझाओ।':s;setState(()=>{msgs.add(['user',userText]);sending=true;attachedImage=null;attachedImageName=null;});input.clear();try{final recent=msgs.take(20).toList();final contents=recent.asMap().entries.map((entry){final i=entry.key;final m=entry.value;if(i==recent.length-1&&imageBytes!=null){return Content.multi([TextPart(m[1]),InlineDataPart('image/jpeg',imageBytes)]);}return m[0]=='user'?Content.text(m[1]):Content.model([TextPart(m[1])]);}).toList();final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are Zing AI inside Zing Zone, an Indian citizen-services assistant. Reply in the user\'s language, especially Hindi/Hinglish. Help users prepare and understand government/recruitment/scholarship/pension/vehicle/certificate forms. First identify the exact form, state, official department and deadline; if uncertain, ask instead of guessing. Explain eligibility, document checklist, field-by-field meanings, common mistakes, and a final review checklist. When official URLs are known, direct the user to the official portal and clearly distinguish official government sites from third parties. Never claim you have accessed a portal, filled fields, uploaded documents, paid a fee, or submitted a form unless a verified integration actually confirms it. Never ask for passwords, OTPs, full card/bank credentials, or unnecessary sensitive identity data in chat. Tell users to enter sensitive details only on the official portal. Do not invent rules, dates, fees, eligibility or required documents; flag uncertainty and advise official verification. Keep steps practical for a phone user and ask one clear question at a time.'));final response=await model.generateContent(contents);final answer=response.text?.trim();if(answer==null||answer.isEmpty)throw Exception('empty-answer');if(mounted)setState(()=>msgs.add(['ai',answer]));}on FirebaseException catch(e){final message='AI request failed (${e.code}). Firebase AI Logic setup, App Check, model availability aur internet check karna hoga.';if(mounted)setState(()=>msgs.add(['ai',message]));}catch(_){if(mounted)setState(()=>msgs.add(['ai','Abhi Zing AI se jawab nahi mila. Firebase Console mein AI Logic setup aur App Check configuration check karke dobara try karo.']));}finally{if(mounted)setState(()=>sending=false);}}Future<void> attachImage() async {try{final file=await picker.pickImage(source:ImageSource.gallery,maxWidth:1600,maxHeight:1600,imageQuality:75);if(file==null||!mounted)return;final bytes=await file.readAsBytes();setState(()=>{attachedImage=bytes,attachedImageName=file.name});}catch(_){if(mounted)note(context,'Image select nahi hui. Photo permission aur storage check karo.');}}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:()async{Navigator.pop(c);if(msgs.isNotEmpty)await ChatMemory.saveHistory(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)setState(()=>msgs.clear());}),
-ListTile(leading:const Icon(Icons.save_outlined,color:blue),title:const Text('Save current draft'),onTap:()async{Navigator.pop(c);if(msgs.isEmpty){note(c,'Save karne ke liye pehle chat mein kuch likho.');return;}await ChatMemory.saveDraft(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)note(c,'Draft this device par save ho gaya.');}),ListTile(leading:const Icon(Icons.history,color:blue),title:const Text('Chat history'),onTap:(){Navigator.pop(c);page(c,const ChatHistory());}),ListTile(leading:const Icon(Icons.drafts_outlined,color:blue),title:const Text('Drafts'),onTap:(){Navigator.pop(c);page(c,const DraftsPage());}),const Divider(),ListTile(leading:const Icon(Icons.settings_outlined,color:blue),title:const Text('Settings'),onTap:(){Navigator.pop(c);page(c,const AppSettingsPage());}),const Spacer(),const Padding(padding:EdgeInsets.all(16),child:Text('Personal AI workspace • Zing Zone',style:TextStyle(fontSize:11,color:muted)))]))),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(15,13,8,12),child:Row(children:[Builder(builder:(ctx)=>IconButton(tooltip:'Open chat drawer',onPressed:()=>Scaffold.of(ctx).openDrawer(),icon:const Icon(Icons.menu_rounded,color:navy,size:26))),Container(width:40,height:40,decoration:BoxDecoration(gradient:const LinearGradient(colors:[blue,violet]),borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.auto_awesome,color:Colors.white)),const SizedBox(width:8),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Zing AI',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:navy)),Text('Your personal assistant',style:TextStyle(fontSize:11,color:muted))])),IconButton(tooltip:'Notifications',onPressed:()=>page(c,const NotificationsPage()),icon:const Icon(Icons.notifications_none,color:navy)),IconButton(tooltip:'Premium',onPressed:()=>page(c,const PremiumPage()),icon:const Icon(Icons.workspace_premium_outlined,color:violet)),TokenBalanceBadge(onTap:()=>page(c,const TokenPage())) ])),const Divider(height:1,color:line),Expanded(child:msgs.isEmpty
+class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;bool sending=false;@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if((s.isEmpty&&attachedImage==null)||sending)return;final imageBytes=attachedImage;final userText=s.isEmpty?'इस तस्वीर/दस्तावेज़ को पढ़ो और समझाओ।':s;setState(() { msgs.add(['user',userText]); sending=true; attachedImage=null; attachedImageName=null; });input.clear();try{final recent=msgs.take(20).toList();final contents=recent.asMap().entries.map((entry){final i=entry.key;final m=entry.value;if(i==recent.length-1&&imageBytes!=null){return Content.multi([TextPart(m[1]),InlineDataPart('image/jpeg',imageBytes)]);}return m[0]=='user'?Content.text(m[1]):Content.model([TextPart(m[1])]);}).toList();final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are Zing AI inside Zing Zone, an Indian citizen-services assistant. Reply in the user\'s language, especially Hindi/Hinglish. Help users prepare and understand government/recruitment/scholarship/pension/vehicle/certificate forms. First identify the exact form, state, official department and deadline; if uncertain, ask instead of guessing. Explain eligibility, document checklist, field-by-field meanings, common mistakes, and a final review checklist. When official URLs are known, direct the user to the official portal and clearly distinguish official government sites from third parties. Never claim you have accessed a portal, filled fields, uploaded documents, paid a fee, or submitted a form unless a verified integration actually confirms it. Never ask for passwords, OTPs, full card/bank credentials, or unnecessary sensitive identity data in chat. Tell users to enter sensitive details only on the official portal. Do not invent rules, dates, fees, eligibility or required documents; flag uncertainty and advise official verification. Keep steps practical for a phone user and ask one clear question at a time.'));final response=await model.generateContent(contents);final answer=response.text?.trim();if(answer==null||answer.isEmpty)throw Exception('empty-answer');if(mounted)setState(()=>msgs.add(['ai',answer]));}on FirebaseException catch(e){final message='AI request failed (${e.code}). Firebase AI Logic setup, App Check, model availability aur internet check karna hoga.';if(mounted)setState(()=>msgs.add(['ai',message]));}catch(_){if(mounted)setState(()=>msgs.add(['ai','Abhi Zing AI se jawab nahi mila. Firebase Console mein AI Logic setup aur App Check configuration check karke dobara try karo.']));}finally{if(mounted)setState(()=>sending=false);}}Future<void> attachImage() async {try{final file=await picker.pickImage(source:ImageSource.gallery,maxWidth:1600,maxHeight:1600,imageQuality:75);if(file==null||!mounted)return;final bytes=await file.readAsBytes();setState(() { attachedImage=bytes; attachedImageName=file.name; });}catch(_){if(mounted)note(context,'Image select nahi hui. Photo permission aur storage check karo.');}}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:()async{Navigator.pop(c);if(msgs.isNotEmpty)await ChatMemory.saveHistory(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)setState(()=>msgs.clear());}),
+ListTile(leading:const Icon(Icons.save_outlined,color:blue),title:const Text('Save current draft'),onTap:()async{Navigator.pop(c);if(msgs.isEmpty){note(c,'Save karne ke liye pehle chat mein kuch likho.');return;}await ChatMemory.saveDraft(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)note(c,'Draft this device par save ho gaya.');}),ListTile(leading:const Icon(Icons.history,color:blue),title:const Text('Chat history'),onTap:(){Navigator.pop(c);page(c,const ChatHistory());}),ListTile(leading:const Icon(Icons.drafts_outlined,color:blue),title:const Text('Drafts'),onTap:(){Navigator.pop(c);page(c,const DraftsPage());}),const Divider(),ListTile(leading:const Icon(Icons.settings_outlined,color:blue),title:const Text('Settings'),onTap:(){Navigator.pop(c);page(c,const AppSettingsPage());}),const Spacer(),const Padding(padding:EdgeInsets.all(16),child:Text('Personal AI workspace • Zing Zone',style:TextStyle(fontSize:11,color:muted)))]))),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(15,13,8,12),child:Row(children:[Builder(builder:(ctx)=>IconButton(tooltip:'Open chat drawer',onPressed:()=>Scaffold.of(ctx).openDrawer(),icon:const Icon(Icons.menu_rounded,color:navy,size:26))),Container(width:40,height:40,decoration:BoxDecoration(gradient:const LinearGradient(colors:[blue,violet]),borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.auto_awesome,color:Colors.white)),const SizedBox(width:8),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Zing AI',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:navy)),Text('Your personal assistant',style:TextStyle(fontSize:11,color:muted))])),IconButton(tooltip:'Open live portal browser',onPressed:()=>page(c,const PortalBrowserPage()),icon:const Icon(Icons.language_rounded,color:blue)),IconButton(tooltip:'Notifications',onPressed:()=>page(c,const NotificationsPage()),icon:const Icon(Icons.notifications_none,color:navy)),IconButton(tooltip:'Premium',onPressed:()=>page(c,const PremiumPage()),icon:const Icon(Icons.workspace_premium_outlined,color:violet)),TokenBalanceBadge(onTap:()=>page(c,const TokenPage())) ])),const Divider(height:1,color:line),Expanded(child:msgs.isEmpty
       ? Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -267,7 +268,131 @@ ListTile(leading:const Icon(Icons.save_outlined,color:blue),title:const Text('Sa
             ),
           ),
         )
-      : ListView(padding:const EdgeInsets.all(16),children:msgs.map((m){final user=m[0]=='user';return Align(alignment:user?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:330),margin:const EdgeInsets.only(bottom:12),padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:user?blue:const Color(0xFFF1F3F8),borderRadius:BorderRadius.only(topLeft:const Radius.circular(19),topRight:const Radius.circular(19),bottomLeft:Radius.circular(user?19:5),bottomRight:Radius.circular(user?5:19))),child:Text(m[1],style:TextStyle(color:user?Colors.white:navy,height:1.5,fontSize:14))));}).toList())),Container(padding:const EdgeInsets.fromLTRB(9,8,9,12),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:15,offset:Offset(0,-4))]),child:Column(children:[if(attachedImage!=null) Padding(padding:const EdgeInsets.only(bottom:8),child:Row(children:[const Icon(Icons.image_outlined,color:blue),Expanded(child:Text(attachedImageName??'Image attached',maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>setState(()=>{attachedImage=null,attachedImageName=null}),icon:const Icon(Icons.close))])),Row(children:[IconButton(tooltip:'Attach image or form photo',onPressed:sending?null:attachImage,icon:const Icon(Icons.add_circle_outline)),Expanded(child:TextField(controller:input,minLines:1,maxLines:5,onSubmitted:(_)=>send(),decoration:InputDecoration(hintText:'Message Zing AI…',filled:true,fillColor:pale,border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none)))),Container(decoration:BoxDecoration(color:blue,borderRadius:BorderRadius.circular(15)),child:IconButton(onPressed:send,icon:const Icon(Icons.arrow_upward,color:Colors.white)))]),Text(sending?'Zing AI is thinking…':'Connected AI replies require sign-in and a deployed backend.',style:const TextStyle(fontSize:10,color:muted))]))])));}
+      : ListView(padding:const EdgeInsets.all(16),children:msgs.map((m){final user=m[0]=='user';return Align(alignment:user?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:330),margin:const EdgeInsets.only(bottom:12),padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:user?blue:const Color(0xFFF1F3F8),borderRadius:BorderRadius.only(topLeft:const Radius.circular(19),topRight:const Radius.circular(19),bottomLeft:Radius.circular(user?19:5),bottomRight:Radius.circular(user?5:19))),child:Text(m[1],style:TextStyle(color:user?Colors.white:navy,height:1.5,fontSize:14))));}).toList())),Container(padding:const EdgeInsets.fromLTRB(9,8,9,12),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:15,offset:Offset(0,-4))]),child:Column(children:[if(attachedImage!=null) Padding(padding:const EdgeInsets.only(bottom:8),child:Row(children:[const Icon(Icons.image_outlined,color:blue),Expanded(child:Text(attachedImageName??'Image attached',maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>setState(() { attachedImage=null; attachedImageName=null; }),icon:const Icon(Icons.close))])),Row(children:[IconButton(tooltip:'Attach image or form photo',onPressed:sending?null:attachImage,icon:const Icon(Icons.add_circle_outline)),Expanded(child:TextField(controller:input,minLines:1,maxLines:5,onSubmitted:(_)=>send(),decoration:InputDecoration(hintText:'Message Zing AI…',filled:true,fillColor:pale,border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none)))),Container(decoration:BoxDecoration(color:blue,borderRadius:BorderRadius.circular(15)),child:IconButton(onPressed:send,icon:const Icon(Icons.arrow_upward,color:Colors.white)))]),Text(sending?'Zing AI is thinking…':'Connected AI replies require sign-in and a deployed backend.',style:const TextStyle(fontSize:10,color:muted))]))])));}
+
+class PortalBrowserPage extends StatefulWidget {
+  const PortalBrowserPage({super.key});
+  @override State<PortalBrowserPage> createState() => _PortalBrowserPageState();
+}
+class _PortalBrowserPageState extends State<PortalBrowserPage> {
+  final urlController = TextEditingController(text: 'https://www.google.com');
+  late final WebViewController web;
+  bool loading = true;
+  String pageSummary = '';
+  List<Map<String, dynamic>> fields = [];
+  @override void initState() {
+    super.initState();
+    web = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (_) { if (mounted) setState(() => loading = true); },
+        onPageFinished: (url) {
+          if (mounted) setState(() { loading = false; urlController.text = url; });
+        },
+      ))
+      ..addJavaScriptChannel('ZingPage', onMessageReceived: (message) {
+        try {
+          final decoded = jsonDecode(message.message);
+          if (decoded is List) {
+            if (mounted) setState(() => fields = decoded.map((e) => Map<String,dynamic>.from(e as Map)).toList());
+          } else if (decoded is Map) {
+            if (mounted) setState(() { pageSummary = decoded['text']?.toString() ?? ''; fields = (decoded['fields'] as List? ?? []).map((e) => Map<String,dynamic>.from(e as Map)).toList(); });
+          }
+        } catch (_) { if (mounted) note(context, 'Page data read nahi ho saka.'); }
+      })
+      ..loadRequest(Uri.parse('https://www.google.com'));
+  }
+  @override void dispose() { urlController.dispose(); super.dispose(); }
+  Future<void> openUrl() async {
+    var raw = urlController.text.trim();
+    if (raw.isEmpty) return;
+    if (!raw.contains('://')) raw = 'https://$raw';
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !uri.hasAuthority) { note(context, 'Valid website address daalo.'); return; }
+    await web.loadRequest(uri);
+  }
+  Future<void> inspectPage() async {
+    const script = r"""
+      (() => {
+        const fields = Array.from(document.querySelectorAll('input,select,textarea,button')).slice(0,150).map((e,i) => {
+          const id = e.id || '';
+          const label = (id ? document.querySelector('label[for="' + CSS.escape(id) + '"]') : null);
+          const parentLabel = e.closest('label');
+          return {index:i, tag:e.tagName.toLowerCase(), type:e.type || '', name:e.name || '', id:id,
+            label:(label?.innerText || parentLabel?.innerText || e.getAttribute('aria-label') || e.placeholder || e.innerText || '').trim().slice(0,120),
+            value: e.tagName === 'SELECT' ? '' : (e.type === 'password' ? '[hidden]' : (e.value || '')).slice(0,80),
+            required:!!e.required, options:e.tagName === 'SELECT' ? Array.from(e.options).slice(0,30).map(o=>({text:o.text,value:o.value})) : []};
+        });
+        ZingPage.postMessage(JSON.stringify({text:(document.body?.innerText || '').slice(0,7000), fields}));
+      })()
+    """;
+    await web.runJavaScript(script);
+    if (mounted) {
+      await showModalBottomSheet<void>(context: context, isScrollControlled: true, builder: (ctx) => SafeArea(child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(height: MediaQuery.of(ctx).size.height * .72, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Current page analysis', style: TextStyle(fontSize:20,fontWeight:FontWeight.w900,color:navy)),
+          const SizedBox(height:6),
+          Text('${fields.length} fields/buttons detected. This is a page inspection, not an automatic submission.',style:const TextStyle(color:muted,fontSize:12)),
+          const SizedBox(height:10),
+          Expanded(child: fields.isEmpty ? const Center(child:Text('No fields detected yet. Wait for the page to finish loading and try again.')) : ListView.builder(itemCount:fields.length,itemBuilder:(ctx,i) {
+            final f=fields[i];
+            return ListTile(dense:true,leading:CircleAvatar(radius:15,child:Text('${i+1}',style:const TextStyle(fontSize:11))),title:Text((f['label']?.toString().isNotEmpty == true ? f['label'] : (f['name']?.toString().isNotEmpty == true ? f['name'] : f['tag'])).toString(),maxLines:2,overflow:TextOverflow.ellipsis),subtitle:Text('${f['tag']} ${f['type']} ${f['required']==true?'• required':''}',style:const TextStyle(fontSize:11,color:muted)));
+          })),
+          const SizedBox(height:8),
+          SizedBox(width:double.infinity,child:FilledButton.icon(onPressed:() { Navigator.pop(ctx); final data=fields.map((f)=>'${f['index']}: ${f['label']} | type=${f['type']} | name=${f['name']} | required=${f['required']}').join('\n'); page(context, PortalAssistPage(url: urlController.text, pageText: pageSummary, fieldText: data)); },icon:const Icon(Icons.auto_awesome),label:const Text('Ask Zing AI about this page'))),
+        ])),
+      )));
+    }
+  }
+  @override Widget build(BuildContext c) => Scaffold(
+    appBar: AppBar(title: const Text('Live portal browser'), actions: [
+      IconButton(tooltip:'Back',onPressed:() async { if(await web.canGoBack()) await web.goBack(); },icon:const Icon(Icons.arrow_back)),
+      IconButton(tooltip:'Forward',onPressed:() async { if(await web.canGoForward()) await web.goForward(); },icon:const Icon(Icons.arrow_forward)),
+      IconButton(tooltip:'Reload',onPressed:()=>web.reload(),icon:const Icon(Icons.refresh)),
+    ]),
+    body: Column(children: [
+      Padding(padding:const EdgeInsets.fromLTRB(12,8,12,8),child:Row(children:[
+        Expanded(child:TextField(controller:urlController,keyboardType:TextInputType.url,onSubmitted:(_)=>openUrl(),decoration:const InputDecoration(prefixIcon:Icon(Icons.language),hintText:'Official website URL',isDense:true))),
+        const SizedBox(width:8),FilledButton(onPressed:openUrl,child:const Text('Open')),
+      ])),
+      if(loading) const LinearProgressIndicator(minHeight:2),
+      Expanded(child:WebViewWidget(controller:web)),
+      SafeArea(top:false,child:Container(padding:const EdgeInsets.fromLTRB(12,8,12,8),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:10)]),child:Row(children:[
+        const Expanded(child:Text('Open portal → Analyze fields → ask AI. CAPTCHA, OTP, payment and final submit stay under your control.',style:TextStyle(fontSize:11,color:muted))),
+        const SizedBox(width:8),FilledButton.icon(onPressed:inspectPage,icon:const Icon(Icons.document_scanner_outlined),label:const Text('Analyze')),
+      ]))),
+    ]),
+  );
+}
+class PortalAssistPage extends StatefulWidget {
+  final String url, pageText, fieldText;
+  const PortalAssistPage({super.key,required this.url,required this.pageText,required this.fieldText});
+  @override State<PortalAssistPage> createState()=>_PortalAssistPageState();
+}
+class _PortalAssistPageState extends State<PortalAssistPage> {
+  final question=TextEditingController(text:'Is form ko samjhao. Kaunse fields ka kya matlab hai, kya documents chahiye aur safe tareeke se kaise bharun?');
+  bool busy=false; String answer='';
+  @override void dispose(){question.dispose();super.dispose();}
+  Future<void> ask() async {
+    if(busy)return; setState(()=>busy=true);
+    try {
+      final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are Zing AI, an Indian public-service form assistant. Reply in Hindi/Hinglish or the language asked. Use only the provided current-page text and field labels plus reliable general knowledge. Clearly flag uncertainty. Never ask the user to send OTP, password, CAPTCHA answer, full bank/card credentials, or unnecessary sensitive identity data. Never claim you filled or submitted a form. Guide field-by-field and ask the user to verify official portal details.'));
+      final prompt='Current URL: ${widget.url}\nVisible page text:\n${widget.pageText}\nDetected form controls:\n${widget.fieldText}\nUser question: ${question.text}';
+      final response=await model.generateContent([Content.text(prompt)]);
+      if(mounted)setState(()=>answer=response.text?.trim()??'No answer returned.');
+    } catch(e) { if(mounted)setState(()=>answer='AI response nahi aaya. Firebase AI Logic enablement, internet aur App Check configuration verify karo. Details: $e'); }
+    finally { if(mounted)setState(()=>busy=false); }
+  }
+  @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Zing AI • Page helper')),body:ListView(padding:const EdgeInsets.all(16),children:[
+    Text(widget.url,style:const TextStyle(color:blue,fontSize:12)),const SizedBox(height:10),
+    TextField(controller:question,minLines:2,maxLines:5,decoration:const InputDecoration(labelText:'What do you need help with?')),
+    const SizedBox(height:10),FilledButton(onPressed:busy?null:ask,child:Text(busy?'Analyzing…':'Analyze with Zing AI')),
+    if(answer.isNotEmpty) ...[const SizedBox(height:16),Container(padding:const EdgeInsets.all(16),decoration:BoxDecoration(color:pale,borderRadius:BorderRadius.circular(18)),child:SelectableText(answer,style:const TextStyle(color:navy,height:1.5)))],
+    const SizedBox(height:14),const Text('Page reading depends on the portal’s scripts, login and browser restrictions. This helper does not auto-fill or submit fields yet; always verify before entering sensitive data.',style:TextStyle(color:muted,fontSize:11)),
+  ]));
+}
+
 class ChatMemory {
   static const _historyKey = 'zz_chat_history_v1';
   static const _draftsKey = 'zz_chat_drafts_v1';

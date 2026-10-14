@@ -61,11 +61,19 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
       - name: Print Android signing fingerprints for Firebase setup
+        continue-on-error: true
         run: |
           cd android
           ./gradlew signingReport
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          for attempt in 1 2 3; do
+            flutter build apk --release && exit 0
+            echo "APK build attempt $attempt failed; clearing corrupt NDK download cache and retrying"
+            rm -rf "$ANDROID_HOME/ndk/28.2.13676358" "$ANDROID_HOME/.temp"/* 2>/dev/null || true
+            sleep 8
+          done
+          exit 1
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

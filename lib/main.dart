@@ -312,6 +312,41 @@ class _PortalBrowserPageState extends State<PortalBrowserPage> {
     if (uri == null || !uri.hasAuthority) { note(context, 'Valid website address daalo.'); return; }
     await web.loadRequest(uri);
   }
+
+  Future<void> fillDetectedFields() async {
+    if(fields.isEmpty){note(context,'पहले Analyze दबाकर पेज के fields पहचानो।');return;}
+    final usable=fields.where((f)=>['input','select','textarea'].contains((f['tag']??'').toString()) && !['password','hidden','file','submit','button'].contains((f['type']??'').toString())).toList();
+    if(usable.isEmpty){note(context,'इस पेज पर सुरक्षित तरीके से भरने योग्य सामान्य fields नहीं मिले।');return;}
+    final ctrls=<int,TextEditingController>{};
+    final selected=<int>{};
+    for(var i=0;i<usable.length;i++){ctrls[i]=TextEditingController();}
+    final ok=await showModalBottomSheet<bool>(context:context,isScrollControlled:true,showDragHandle:true,builder:(ctx)=>StatefulBuilder(builder:(ctx,setSheet)=>SafeArea(child:Padding(
+      padding:EdgeInsets.only(left:14,right:14,top:8,bottom:MediaQuery.of(ctx).viewInsets.bottom+10),
+      child:SizedBox(height:MediaQuery.of(ctx).size.height*.8,child:Column(children:[
+        const Text('Review & fill fields',style:TextStyle(fontWeight:FontWeight.w900,fontSize:20,color:navy)),
+        const Text('हर value जाँचो। सिर्फ tick किए fields भरेंगे; submit नहीं होगा।',style:TextStyle(fontSize:12,color:muted)),
+        Expanded(child:ListView.builder(itemCount:usable.length,itemBuilder:(ctx,i){
+          final f=usable[i];
+          return Padding(padding:const EdgeInsets.symmetric(vertical:5),child:Column(children:[
+            CheckboxListTile(dense:true,contentPadding:EdgeInsets.zero,value:selected.contains(i),onChanged:(v)=>setSheet(()=>v==true?selected.add(i):selected.remove(i)),title:Text((f['label']??f['name']??('Field '+(i+1).toString())).toString(),style:const TextStyle(fontWeight:FontWeight.w700,color:navy)),subtitle:Text((f['tag']??'').toString()+' '+(f['type']??'').toString()+((f['required']==true)?' • required':''),style:const TextStyle(fontSize:11,color:muted))),
+            TextField(controller:ctrls[i],decoration:InputDecoration(isDense:true,hintText:(f['options'] is List && (f['options'] as List).isNotEmpty)?'Options: '+(f['options'] as List).take(4).map((o)=>o is Map?o['text'].toString():o.toString()).join(', '):'Value to fill')),
+          ]));
+        })),
+        FilledButton(onPressed:()=>Navigator.pop(ctx,true),style:FilledButton.styleFrom(backgroundColor:blue,minimumSize:const Size.fromHeight(48)),child:Text('Fill '+selected.length.toString()+' selected fields')),
+      ])),
+    ))));
+    if(ok==true && selected.isNotEmpty){
+      final payload=<Map<String,dynamic>>[];
+      for(final i in selected){final v=ctrls[i]!.text.trim();if(v.isNotEmpty)payload.add({'index':usable[i]['index']??i,'value':v});}
+      try{
+        final payloadJson=jsonEncode(payload);
+        final js="(()=>{const data=JSON.parse("+jsonEncode(payloadJson)+");const els=Array.from(document.querySelectorAll('input,select,textarea,button')).slice(0,150);let n=0;for(const x of data){const e=els[x.index];if(!e||e.disabled||['password','hidden','file','submit','button'].includes(e.type)||e.tagName==='BUTTON')continue;const p=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(p,'value')?.set;if(setter)setter.call(e,x.value);else e.value=x.value;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));n++;}return 'Filled '+n+' fields. Nothing submitted.';})()";
+        final result=await web.runJavaScriptReturningResult(js);
+        if(mounted)note(context,result.toString());
+      }catch(_){if(mounted)note(context,'इस वेबसाइट पर autofill नहीं चला। fields manually भरो।');}
+    }
+    for(final c in ctrls.values){c.dispose();}
+  }
   Future<void> inspectPage() async {
     const script = r"""
       (() => {
@@ -361,7 +396,7 @@ class _PortalBrowserPageState extends State<PortalBrowserPage> {
       Expanded(child:WebViewWidget(controller:web)),
       SafeArea(top:false,child:Container(padding:const EdgeInsets.fromLTRB(12,8,12,8),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:10)]),child:Row(children:[
         const Expanded(child:Text('Open portal → Analyze fields → ask AI. CAPTCHA, OTP, payment and final submit stay under your control.',style:TextStyle(fontSize:11,color:muted))),
-        const SizedBox(width:8),FilledButton.icon(onPressed:inspectPage,icon:const Icon(Icons.document_scanner_outlined),label:const Text('Analyze')),
+        const SizedBox(width:8),FilledButton.icon(onPressed:inspectPage,icon:const Icon(Icons.document_scanner_outlined),label:const Text('Analyze')),IconButton(tooltip:'Review and fill fields',onPressed:fillDetectedFields,icon:const Icon(Icons.edit_note,color:blue,size:28)),
       ]))),
     ]),
   );

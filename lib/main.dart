@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_ai/firebase_ai.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 
 const navy=Color(0xFF11152B), blue=Color(0xFF4965F5), violet=Color(0xFF7856D9), pink=Color(0xFFEF4F83), muted=Color(0xFF747B8F), line=Color(0xFFE8EAF1), pale=Color(0xFFF6F7FB);
@@ -238,7 +239,8 @@ class _PhoneOtpState extends State<PhoneOtp>{final code=TextEditingController();
 class Shell extends StatefulWidget{const Shell({super.key});@override State<Shell> createState()=>_ShellState();}
 class _ShellState extends State<Shell>{int tab=0;@override Widget build(BuildContext c)=>Scaffold(body:IndexedStack(index:tab,children:const[ChatPage(),StorePage(),RewardsPage(),ProfilePage()]),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.chat_bubble_outline),selectedIcon:Icon(Icons.chat_bubble),label:'AI Chat'),NavigationDestination(icon:Icon(Icons.shopping_bag_outlined),selectedIcon:Icon(Icons.shopping_bag),label:'Store'),NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),selectedIcon:Icon(Icons.card_giftcard),label:'Rewards'),NavigationDestination(icon:Icon(Icons.person_outline),selectedIcon:Icon(Icons.person),label:'Profile')]));}
 class ChatPage extends StatefulWidget{const ChatPage({super.key});@override State<ChatPage> createState()=>_ChatPageState();}
-class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];bool sending=false;@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if(s.isEmpty||sending)return;setState((){msgs.add(['user',s]);sending=true;});input.clear();try{final conversation=msgs.map((m)=>"${m[0]=='user'?'User':'Zing AI'}: ${m[1]}").join('\n');final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are Zing AI, a helpful assistant for Indian users. Respond in the user\'s language, including Hindi/Hinglish when appropriate. For government forms, explain requirements and guide the user carefully; never claim a form was submitted unless a trusted integration confirms it. Do not ask users to share passwords, OTPs, or full payment credentials in chat. Flag uncertainty and direct users to official portals for final verification.'));final response=await model.generateContent([Content.text(conversation)]);final answer=response.text?.trim();if(answer==null||answer.isEmpty)throw Exception('empty-answer');if(mounted)setState(()=>msgs.add(['ai',answer]));}on FirebaseException catch(e){final message='AI request failed (${e.code}). Firebase AI Logic setup, App Check, model availability aur internet check karna hoga.';if(mounted)setState(()=>msgs.add(['ai',message]));}catch(_){if(mounted)setState(()=>msgs.add(['ai','Abhi Zing AI se jawab nahi mila. Firebase Console mein AI Logic setup aur App Check configuration check karke dobara try karo.']));}finally{if(mounted)setState(()=>sending=false);}}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:(){Navigator.pop(c);if(msgs.isNotEmpty)ChatMemory.history.insert(0,msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));setState(()=>msgs.clear());}),ListTile(leading:const Icon(Icons.history,color:blue),title:const Text('Chat history'),onTap:(){Navigator.pop(c);page(c,const ChatHistory());}),ListTile(leading:const Icon(Icons.drafts_outlined,color:blue),title:const Text('Drafts'),onTap:(){Navigator.pop(c);page(c,const DraftsPage());}),const Divider(),ListTile(leading:const Icon(Icons.settings_outlined,color:blue),title:const Text('Settings'),onTap:(){Navigator.pop(c);page(c,const AppSettingsPage());}),const Spacer(),const Padding(padding:EdgeInsets.all(16),child:Text('Personal AI workspace • Zing Zone',style:TextStyle(fontSize:11,color:muted)))]))),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(15,13,8,12),child:Row(children:[Builder(builder:(ctx)=>IconButton(tooltip:'Open chat drawer',onPressed:()=>Scaffold.of(ctx).openDrawer(),icon:const Icon(Icons.menu_rounded,color:navy,size:26))),Container(width:40,height:40,decoration:BoxDecoration(gradient:const LinearGradient(colors:[blue,violet]),borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.auto_awesome,color:Colors.white)),const SizedBox(width:8),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Zing AI',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:navy)),Text('Your personal assistant',style:TextStyle(fontSize:11,color:muted))])),IconButton(tooltip:'Notifications',onPressed:()=>page(c,const NotificationsPage()),icon:const Icon(Icons.notifications_none,color:navy)),IconButton(tooltip:'Premium',onPressed:()=>page(c,const PremiumPage()),icon:const Icon(Icons.workspace_premium_outlined,color:violet)),TokenBalanceBadge(onTap:()=>page(c,const TokenPage())) ])),const Divider(height:1,color:line),Expanded(child:msgs.isEmpty
+class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];bool sending=false;@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if(s.isEmpty||sending)return;setState((){msgs.add(['user',s]);sending=true;});input.clear();try{final conversation=msgs.map((m)=>"${m[0]=='user'?'User':'Zing AI'}: ${m[1]}").join('\n');final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are Zing AI, a helpful assistant for Indian users. Respond in the user\'s language, including Hindi/Hinglish when appropriate. For government forms, explain requirements and guide the user carefully; never claim a form was submitted unless a trusted integration confirms it. Do not ask users to share passwords, OTPs, or full payment credentials in chat. Flag uncertainty and direct users to official portals for final verification.'));final response=await model.generateContent([Content.text(conversation)]);final answer=response.text?.trim();if(answer==null||answer.isEmpty)throw Exception('empty-answer');if(mounted)setState(()=>msgs.add(['ai',answer]));}on FirebaseException catch(e){final message='AI request failed (${e.code}). Firebase AI Logic setup, App Check, model availability aur internet check karna hoga.';if(mounted)setState(()=>msgs.add(['ai',message]));}catch(_){if(mounted)setState(()=>msgs.add(['ai','Abhi Zing AI se jawab nahi mila. Firebase Console mein AI Logic setup aur App Check configuration check karke dobara try karo.']));}finally{if(mounted)setState(()=>sending=false);}}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:()async{Navigator.pop(c);if(msgs.isNotEmpty)await ChatMemory.saveHistory(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)setState(()=>msgs.clear());}),
+ListTile(leading:const Icon(Icons.save_outlined,color:blue),title:const Text('Save current draft'),onTap:()async{Navigator.pop(c);if(msgs.isEmpty){note(c,'Save karne ke liye pehle chat mein kuch likho.');return;}await ChatMemory.saveDraft(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)note(c,'Draft this device par save ho gaya.');}),ListTile(leading:const Icon(Icons.history,color:blue),title:const Text('Chat history'),onTap:(){Navigator.pop(c);page(c,const ChatHistory());}),ListTile(leading:const Icon(Icons.drafts_outlined,color:blue),title:const Text('Drafts'),onTap:(){Navigator.pop(c);page(c,const DraftsPage());}),const Divider(),ListTile(leading:const Icon(Icons.settings_outlined,color:blue),title:const Text('Settings'),onTap:(){Navigator.pop(c);page(c,const AppSettingsPage());}),const Spacer(),const Padding(padding:EdgeInsets.all(16),child:Text('Personal AI workspace • Zing Zone',style:TextStyle(fontSize:11,color:muted)))]))),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(15,13,8,12),child:Row(children:[Builder(builder:(ctx)=>IconButton(tooltip:'Open chat drawer',onPressed:()=>Scaffold.of(ctx).openDrawer(),icon:const Icon(Icons.menu_rounded,color:navy,size:26))),Container(width:40,height:40,decoration:BoxDecoration(gradient:const LinearGradient(colors:[blue,violet]),borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.auto_awesome,color:Colors.white)),const SizedBox(width:8),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Zing AI',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:navy)),Text('Your personal assistant',style:TextStyle(fontSize:11,color:muted))])),IconButton(tooltip:'Notifications',onPressed:()=>page(c,const NotificationsPage()),icon:const Icon(Icons.notifications_none,color:navy)),IconButton(tooltip:'Premium',onPressed:()=>page(c,const PremiumPage()),icon:const Icon(Icons.workspace_premium_outlined,color:violet)),TokenBalanceBadge(onTap:()=>page(c,const TokenPage())) ])),const Divider(height:1,color:line),Expanded(child:msgs.isEmpty
       ? const Center(
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 28),
@@ -258,24 +260,73 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
         )
       : ListView(padding:const EdgeInsets.all(16),children:msgs.map((m){final user=m[0]=='user';return Align(alignment:user?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:330),margin:const EdgeInsets.only(bottom:12),padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:user?blue:const Color(0xFFF1F3F8),borderRadius:BorderRadius.only(topLeft:const Radius.circular(19),topRight:const Radius.circular(19),bottomLeft:Radius.circular(user?19:5),bottomRight:Radius.circular(user?5:19))),child:Text(m[1],style:TextStyle(color:user?Colors.white:navy,height:1.5,fontSize:14))));}).toList())),Container(padding:const EdgeInsets.fromLTRB(9,8,9,12),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:15,offset:Offset(0,-4))]),child:Column(children:[Row(children:[IconButton(onPressed:()=>note(c,'File attachment needs integration.'),icon:const Icon(Icons.add_circle_outline)),Expanded(child:TextField(controller:input,minLines:1,maxLines:5,onSubmitted:(_)=>send(),decoration:InputDecoration(hintText:'Message Zing AI…',filled:true,fillColor:pale,border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none)))),Container(decoration:BoxDecoration(color:blue,borderRadius:BorderRadius.circular(15)),child:IconButton(onPressed:send,icon:const Icon(Icons.arrow_upward,color:Colors.white)))]),Text(sending?'Zing AI is thinking…':'Connected AI replies require sign-in and a deployed backend.',style:const TextStyle(fontSize:10,color:muted))]))])));}
 class ChatMemory {
-  static final List<String> drafts = <String>[];
-  static final List<String> history = <String>[];
+  static const _historyKey = 'zz_chat_history_v1';
+  static const _draftsKey = 'zz_chat_drafts_v1';
+
+  static Future<List<String>> loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_historyKey) ?? <String>[];
+  }
+
+  static Future<List<String>> loadDrafts() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_draftsKey) ?? <String>[];
+  }
+
+  static Future<void> saveHistory(String conversation) async {
+    final value = conversation.trim();
+    if (value.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final history = prefs.getStringList(_historyKey) ?? <String>[];
+    history.insert(0, value);
+    await prefs.setStringList(_historyKey, history.take(50).toList());
+  }
+
+  static Future<void> saveDraft(String draft) async {
+    final value = draft.trim();
+    if (value.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final drafts = prefs.getStringList(_draftsKey) ?? <String>[];
+    drafts.insert(0, value);
+    await prefs.setStringList(_draftsKey, drafts.take(50).toList());
+  }
+
+  static Future<void> deleteDraftAt(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    final drafts = prefs.getStringList(_draftsKey) ?? <String>[];
+    if (index < 0 || index >= drafts.length) return;
+    drafts.removeAt(index);
+    await prefs.setStringList(_draftsKey, drafts);
+  }
 }
 
-class ChatHistory extends StatelessWidget {
+class ChatHistory extends StatefulWidget {
   const ChatHistory({super.key});
+  @override State<ChatHistory> createState() => _ChatHistoryState();
+}
+class _ChatHistoryState extends State<ChatHistory> {
+  List<String> history = <String>[];
+  @override void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    final values = await ChatMemory.loadHistory();
+    if (mounted) setState(() => history = values);
+  }
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Chat history')),
-    body: ChatMemory.history.isEmpty
-      ? const Center(child: Text('No saved chats yet. Use the three-dot menu to save a conversation.'))
+    body: history.isEmpty
+      ? const Center(child: Text('No saved chats yet. Start a chat, then choose New chat to archive it.'))
       : ListView.builder(
-          itemCount: ChatMemory.history.length,
+          itemCount: history.length,
           itemBuilder: (context, index) => ListTile(
             leading: const CircleAvatar(child: Icon(Icons.chat_bubble_outline)),
-            title: Text('Conversation ${ChatMemory.history.length - index}'),
-            subtitle: Text(ChatMemory.history[index], maxLines: 2, overflow: TextOverflow.ellipsis),
-            onTap: () => note(context, 'Conversation preview is available in this local session.'),
+            title: Text('Conversation ${history.length - index}'),
+            subtitle: Text(history[index], maxLines: 2, overflow: TextOverflow.ellipsis),
+            onTap: () => showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+              title: Text('Conversation ${history.length - index}'),
+              content: SingleChildScrollView(child: SelectableText(history[index])),
+              actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+            )),
           ),
         ),
   );
@@ -286,21 +337,36 @@ class DraftsPage extends StatefulWidget {
   @override State<DraftsPage> createState() => _DraftsPageState();
 }
 class _DraftsPageState extends State<DraftsPage> {
+  List<String> drafts = <String>[];
+  @override void initState() { super.initState(); _load(); }
+  Future<void> _load() async {
+    final values = await ChatMemory.loadDrafts();
+    if (mounted) setState(() => drafts = values);
+  }
+  Future<void> _delete(int index) async {
+    await ChatMemory.deleteDraftAt(index);
+    if (mounted) setState(() => drafts.removeAt(index));
+  }
   @override
   Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Chat drafts')),
-    body: ChatMemory.drafts.isEmpty
-      ? const Center(child: Text('No drafts saved yet. Open AI Chat → ⋮ → Save draft.'))
+    body: drafts.isEmpty
+      ? const Center(child: Text('No drafts saved yet. Open AI Chat menu → Save current draft.'))
       : ListView.builder(
-          itemCount: ChatMemory.drafts.length,
+          itemCount: drafts.length,
           itemBuilder: (context, index) => ListTile(
             leading: const Icon(Icons.drafts_outlined, color: blue),
-            title: Text(ChatMemory.drafts[index], maxLines: 3, overflow: TextOverflow.ellipsis),
+            title: Text(drafts[index], maxLines: 3, overflow: TextOverflow.ellipsis),
             trailing: IconButton(
               tooltip: 'Delete draft',
               icon: const Icon(Icons.delete_outline),
-              onPressed: () { setState(() => ChatMemory.drafts.removeAt(index)); },
+              onPressed: () => _delete(index),
             ),
+            onTap: () => showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+              title: const Text('Saved draft'),
+              content: SingleChildScrollView(child: SelectableText(drafts[index])),
+              actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+            )),
           ),
         ),
   );

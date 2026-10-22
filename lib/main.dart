@@ -407,6 +407,8 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     finally{info.dispose();if(mounted)setState(()=>analyzing=false);}
   }
 
+  Future<void> askAI() async {
+    if(pageText.isEmpty&&fields.isEmpty){note(context,'पहले वेबसाइट खोलकर फ़ील्ड पहचानो।');return;}
     setState(()=>aiAnswer='AI मदद तैयार हो रही है…');
     try{
       final prefs=await SharedPreferences.getInstance();

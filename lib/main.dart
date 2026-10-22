@@ -388,7 +388,25 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       final prompt='You help prepare form values. Return ONLY valid JSON object mapping field index strings to suggested values, e.g. {"0":"value","1":"value"}. Use ONLY explicit user-provided facts below; do not infer or invent missing identity facts. If a value is unknown or ambiguous, omit that field. For select fields, use one exact available option value when possible. Never fill password, OTP, CAPTCHA, file upload, payment, bank/card, checkbox/radio, or submit fields. This is a draft for user review, not submission.\nCurrent page URL: '+urlController.text+'\nVisible page text: '+pageText.substring(0,pageText.length>3500?3500:pageText.length)+'\nAllowed fields JSON: '+jsonEncode(schema)+'\nUser-provided facts: '+info.text.trim();
       final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('Return only valid JSON. Never invent personal data. Protect sensitive credentials.'));
       final response=await model.generateContent([Content.text(prompt)]);
-      final raw=(response.text??'').trim().replaceAll(RegExp(r'^\`{3}(?:json)?\s*|\s*\`{3}    if(pageText.isEmpty&&fields.isEmpty){note(context,'पहले वेबसाइट खोलकर फ़ील्ड पहचानो।');return;}
+      final raw=(response.text??'').trim().replaceAll(RegExp(r'^```(?:json)?\s*|\s*```$'), '');
+      final decoded=jsonDecode(raw);
+      if(decoded is! Map)throw const FormatException('AI output was not a JSON object');
+      final suggestions=<int,String>{};
+      for(final entry in decoded.entries){
+        final idx=int.tryParse(entry.key.toString());
+        if(idx==null||entry.value==null)continue;
+        final val=entry.value.toString().trim();
+        if(val.isEmpty)continue;
+        final allowed=safe.any((f)=>(f['index'] as num?)?.toInt()==idx);
+        if(allowed)suggestions[idx]=val;
+      }
+      if(!mounted)return;
+      if(suggestions.isEmpty){note(context,'AI को कोई निश्चित फ़ील्ड वैल्यू नहीं मिली। जानकारी जाँचकर दोबारा कोशिश करें।');}
+      else{await fillFields(suggestions:suggestions);}
+    }catch(e){if(mounted)note(context,'AI से फ़ील्ड तैयार नहीं हुए। Firebase AI Logic/Internet जाँचें और फ़ील्ड खुद भरें।');}
+    finally{info.dispose();if(mounted)setState(()=>analyzing=false);}
+  }
+
     setState(()=>aiAnswer='AI मदद तैयार हो रही है…');
     try{
       final prefs=await SharedPreferences.getInstance();

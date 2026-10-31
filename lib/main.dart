@@ -255,7 +255,8 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
   input.clear();
   await _persistConversation();
   try {
-    final recent=msgs.take(20).toList();
+    // Always send the newest messages so the latest user prompt is never dropped.
+    final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();
     String? answer;
     final prefs=await SharedPreferences.getInstance();
     final workerUrl=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();

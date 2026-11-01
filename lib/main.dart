@@ -67,8 +67,48 @@ class ZingZone extends StatelessWidget {
         labelTextStyle: WidgetStatePropertyAll(TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
       ),
     ),
-    home: const Welcome(),
+    home: const AuthGate(),
   );
+}
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: CircularProgressIndicator(color: blue)),
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, color: muted, size: 42),
+                    const SizedBox(height: 12),
+                    const Text('Account service is unavailable. Please check your internet and try again.',
+                      textAlign: TextAlign.center, style: TextStyle(color: navy)),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: () => FirebaseAuth.instance.signOut(),
+                      child: const Text('Back to sign in')),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return snapshot.data == null ? const Welcome() : const Shell();
+      },
+    );
+  }
 }
 class Welcome extends StatelessWidget {
   const Welcome({super.key});
@@ -211,11 +251,7 @@ class Welcome extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 7),
-                          TextButton(
-                            onPressed: () => Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const Shell()), (r) => false),
-                            child: const Text('Explore app as guest', style: TextStyle(fontWeight: FontWeight.w700)),
-                          ),
+
                         ],
                       ),
                     ),

@@ -261,6 +261,7 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
     // window starts on an old assistant reply, drop that orphaned reply only.
     if(recent.isNotEmpty && recent.first[0]!='user') recent.removeAt(0);
     String? answer;
+    String? workerFailure;
     final prefs=await SharedPreferences.getInstance();
     final workerUrl=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
     // Try Cloudflare first, but never let its failure block Firebase fallbacks.
@@ -278,12 +279,12 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
           }));
           final res=await req.close().timeout(const Duration(seconds:45));
           final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
-          if(res.statusCode<200 || res.statusCode>=300) throw Exception('Worker HTTP '+res.statusCode.toString());
+          if(res.statusCode<200 || res.statusCode>=300) throw Exception('Worker HTTP '+res.statusCode.toString()+': '+body);
           final decoded=jsonDecode(body);
           answer=(decoded is Map ? decoded['answer'] : null)?.toString().trim();
           if(answer==null || answer!.isEmpty) throw Exception('Worker returned no answer');
         } finally { client.close(force:true); }
-      } catch (_) { answer=null; }
+      } catch (e) { workerFailure=e.toString(); answer=null; }
     }
     // Firebase callable is the first fallback (and primary route for images).
     if(answer==null || answer!.isEmpty) {
@@ -312,8 +313,9 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
   } on FirebaseException catch(e) {
     final message='AI जवाब नहीं मिल पाया ('+e.code+'). इंटरनेट या AI सर्वर की उपलब्धता जाँचनी होगी।';
     if(mounted) { setState(()=>msgs.add(['ai',message])); await _persistConversation(); }
-  } catch(_) {
-    const message='अभी AI से जवाब नहीं मिल पाया। सर्वर या इंटरनेट में समस्या है। थोड़ी देर बाद फिर कोशिश करें।';
+  } catch(e) {
+    final detail=(workerFailure??e.toString()).replaceAll(RegExp(r'\\s+'),' ').trim();
+    final message='AI से जवाब नहीं मिला। कारण: '+(detail.isEmpty?'सर्वर से जवाब नहीं आया।':detail);
     if(mounted) { setState(()=>msgs.add(['ai',message])); await _persistConversation(); }
   } finally { if(mounted) setState(()=>sending=false); }
 }

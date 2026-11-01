@@ -254,6 +254,7 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
   setState(() { msgs.add(['user',userText]); sending=true; attachedImage=null; attachedImageName=null; });
   input.clear();
   await _persistConversation();
+  String? workerFailure;
   try {
     // Always send the newest messages so the latest user prompt is never dropped.
     final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();
@@ -261,7 +262,6 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
     // window starts on an old assistant reply, drop that orphaned reply only.
     if(recent.isNotEmpty && recent.first[0]!='user') recent.removeAt(0);
     String? answer;
-    String? workerFailure;
     final prefs=await SharedPreferences.getInstance();
     final workerUrl=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
     // Try Cloudflare first, but never let its failure block Firebase fallbacks.

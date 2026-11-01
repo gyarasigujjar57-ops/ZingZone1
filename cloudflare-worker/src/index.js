@@ -34,6 +34,16 @@ export default {
         return Response.json({ error: "Last message must be from the user" }, { status: 400, headers: cors });
       }
 
+      const image = body?.image;
+      if (image != null) {
+        const mimeType = typeof image.mimeType === "string" ? image.mimeType : "image/jpeg";
+        const data = typeof image.data === "string" ? image.data : "";
+        if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType) || !data || data.length > 8_000_000) {
+          return Response.json({ error: "Image format or size is not supported." }, { status: 400, headers: cors });
+        }
+        contents[contents.length - 1].parts.push({ inlineData: { mimeType, data } });
+      }
+
       const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },

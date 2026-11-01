@@ -264,7 +264,7 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
     final prefs=await SharedPreferences.getInstance();
     final workerUrl=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
     // Try Cloudflare first, but never let its failure block Firebase fallbacks.
-    if(workerUrl.isNotEmpty && imageBytes==null) {
+    if(workerUrl.isNotEmpty) {
       try {
         final uri=Uri.tryParse(workerUrl);
         if(uri==null || uri.scheme!='https' || uri.host.isEmpty) throw Exception('Invalid Worker HTTPS URL');

@@ -257,6 +257,9 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
   try {
     // Always send the newest messages so the latest user prompt is never dropped.
     final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();
+    // Gemini conversation history must begin with a user turn. When the 20-message
+    // window starts on an old assistant reply, drop that orphaned reply only.
+    if(recent.isNotEmpty && recent.first[0]!='user') recent.removeAt(0);
     String? answer;
     final prefs=await SharedPreferences.getInstance();
     final workerUrl=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();

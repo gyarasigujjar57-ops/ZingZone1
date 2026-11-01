@@ -16,35 +16,47 @@ export default {
       return Response.json({ error: "Gemini API key is not configured on this Worker. Add GEMINI_API_KEY as a Worker secret." }, { status: 503, headers: cors });
     }
 
+    let body;
     try {
-      const body = await request.json();
-      const incoming = body?.messages;
-      if (!Array.isArray(incoming) || incoming.length < 1 || incoming.length > 20) {
-        return Response.json({ error: "Send 1 to 20 messages" }, { status: 400, headers: cors });
-      }
+      body = await request.json();
+    } catch (_) {
+      return Response.json({ error: "Request body must be valid JSON." }, { status: 400, headers: cors });
+    }
 
-      const contents = incoming.map((item) => {
+    const incoming = body?.messages;
+    if (!Array.isArray(incoming) || incoming.length < 1 || incoming.length > 20) {
+      return Response.json({ error: "Send 1 to 20 messages" }, { status: 400, headers: cors });
+    }
+
+    let contents;
+    try {
+      contents = incoming.map((item) => {
         const role = item?.role;
         const text = typeof item?.text === "string" ? item.text.trim() : "";
         if (!text || text.length > 8000) throw new Error("Invalid message");
         if (role !== "user" && role !== "assistant" && role !== "model") throw new Error("Invalid message role");
         return { role: role === "assistant" || role === "model" ? "model" : "user", parts: [{ text }] };
       });
-      if (contents[contents.length - 1].role !== "user") {
-        return Response.json({ error: "Last message must be from the user" }, { status: 400, headers: cors });
-      }
+    } catch (error) {
+      return Response.json({ error: error.message }, { status: 400, headers: cors });
+    }
+    if (contents[contents.length - 1].role !== "user") {
+      return Response.json({ error: "Last message must be from the user" }, { status: 400, headers: cors });
+    }
 
-      const image = body?.image;
-      if (image != null) {
-        const mimeType = typeof image.mimeType === "string" ? image.mimeType : "image/jpeg";
-        const data = typeof image.data === "string" ? image.data : "";
-        if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType) || !data || data.length > 8_000_000) {
-          return Response.json({ error: "Image format or size is not supported." }, { status: 400, headers: cors });
-        }
-        contents[contents.length - 1].parts.push({ inlineData: { mimeType, data } });
+    const image = body?.image;
+    if (image != null) {
+      const mimeType = typeof image.mimeType === "string" ? image.mimeType : "image/jpeg";
+      const data = typeof image.data === "string" ? image.data : "";
+      if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType) || !data || data.length > 8_000_000) {
+        return Response.json({ error: "Image format or size is not supported." }, { status: 400, headers: cors });
       }
+      contents[contents.length - 1].parts.push({ inlineData: { mimeType, data } });
+    }
 
-      const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
+    let upstream;
+    try {
+      upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
         body: JSON.stringify({
@@ -53,18 +65,24 @@ export default {
           generationConfig: { temperature: 0.5, maxOutputTokens: 1800 }
         })
       });
-
-      if (!upstream.ok) {
-        console.error("Gemini API returned HTTP", upstream.status);
-        return Response.json({ error: upstream.status === 429 ? "Gemini request limit reached. Please try again shortly." : "Gemini could not answer right now. Check the API key and Gemini API access." }, { status: upstream.status === 429 ? 429 : 502, headers: cors });
-      }
-      const result = await upstream.json();
-      const answer = result.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
-      if (!answer) return Response.json({ error: "Gemini returned an empty answer. Please try again." }, { status: 502, headers: cors });
-      return Response.json({ answer }, { status: 200, headers: cors });
     } catch (error) {
-      const message = error?.message === "Invalid message" || error?.message === "Invalid message role" ? error.message : "AI request failed. Please try again.";
-      return Response.json({ error: message }, { status: 400, headers: cors });
+      console.error("Gemini network request failed", error);
+      return Response.json({ error: "Worker could not reach Gemini. Check Gemini API availability and try again." }, { status: 502, headers: cors });
     }
+
+    if (!upstream.ok) {
+      console.error("Gemini API returned HTTP", upstream.status);
+      return Response.json({ error: upstream.status === 429 ? "Gemini request limit reached. Please try again shortly." : "Gemini could not answer right now. Check the API key and Gemini API access." }, { status: upstream.status === 429 ? 429 : 502, headers: cors });
+    }
+
+    let result;
+    try {
+      result = await upstream.json();
+    } catch (_) {
+      return Response.json({ error: "Gemini returned an unreadable response." }, { status: 502, headers: cors });
+    }
+    const answer = result.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+    if (!answer) return Response.json({ error: "Gemini returned an empty answer. Please try again." }, { status: 502, headers: cors });
+    return Response.json({ answer }, { status: 200, headers: cors });
   }
 };

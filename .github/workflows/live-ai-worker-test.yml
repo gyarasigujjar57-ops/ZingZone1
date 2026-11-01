@@ -1,0 +1,51 @@
+name: Live AI Worker Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/live-form-chat-panel
+    paths:
+      - ".github/workflows/live-ai-worker-test.yml"
+
+jobs:
+  test-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check Worker health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 \
+            "https://zing-zone-ai.gyarasigujjar57.workers.dev" \
+            -o health.json
+          cat health.json
+          echo
+      - name: Verify live Gemini reply through Worker
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 45 \
+            -o response.json -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data '{"messages":[{"role":"user","text":"Reply with exactly: ZING_LIVE_OK"}]}' \
+            "https://zing-zone-ai.gyarasigujjar57.workers.dev")
+          echo "HTTP status: $code"
+          if [ "$code" != "200" ]; then
+            echo "Worker request failed. Sanitized response:"
+            jq '{error, message, details}' response.json 2>/dev/null || echo "No JSON error body"
+            exit 1
+          fi
+          answer=$(jq -r '.answer // empty' response.json)
+          if [ -z "$answer" ]; then
+            echo "Worker returned HTTP 200 but no answer field."
+            jq '{error, message}' response.json
+            exit 1
+          fi
+          echo "AI reply received successfully:"
+          echo "$answer"
+          if ! printf '%s' "$answer" | grep -q 'ZING_LIVE_OK'; then
+            echo "The response arrived but did not contain the expected test text."
+            exit 1
+          fi
+          echo "PASS: Cloudflare Worker reached Gemini and returned an answer."

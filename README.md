@@ -8,4 +8,4 @@ GitHub Actions builds the Android release APK on pushes to `feature/live-form-ch
 
 ## Live AI status
 
-A successful APK build verifies the Android package, not the external Gemini API. The Worker must separately pass the live chat test before the app can return AI answers.
+The Cloudflare Worker has now passed the live Gemini reply test. A successful APK build verifies the Android package; install and on-device chat testing are still required.

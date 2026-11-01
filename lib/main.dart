@@ -272,7 +272,10 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
         try {
           final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
           req.headers.contentType=io.ContentType.json;
-          req.write(jsonEncode({'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList()}));
+          req.write(jsonEncode({
+            'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList(),
+            if(imageBytes!=null) 'image': {'mimeType':'image/jpeg','data':base64Encode(imageBytes)}
+          }));
           final res=await req.close().timeout(const Duration(seconds:45));
           final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
           if(res.statusCode<200 || res.statusCode>=300) throw Exception('Worker HTTP '+res.statusCode.toString());

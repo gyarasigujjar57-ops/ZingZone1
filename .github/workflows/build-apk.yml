@@ -81,3 +81,5 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+# Re-trigger APK build after live AI chat fixes.

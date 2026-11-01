@@ -33,7 +33,7 @@ jobs:
           echo "HTTP status: $code"
           if [ "$code" != "200" ]; then
             echo "Worker request failed. Sanitized response:"
-            jq '{error, message, details}' response.json 2>/dev/null || echo "No JSON error body"
+            jq '{error, upstream_status, diagnostic}' response.json 2>/dev/null || echo "No JSON error body"
             exit 1
           fi
           answer=$(jq -r '.answer // empty' response.json)

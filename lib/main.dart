@@ -610,6 +610,43 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       if(mounted)setState(()=>aiAnswer=answer.isEmpty?'AI ने खाली जवाब दिया।':answer);
     }catch(_){if(mounted)setState(()=>aiAnswer='AI कनेक्शन नहीं हुआ। Settings में Cloudflare Worker URL या Firebase AI सेटिंग जाँचो।');}
   }
+  Future<void> checkEligibility() async {
+    if(pageText.trim().isEmpty){note(context,'पहले आधिकारिक भर्ती/योजना की सूचना वाला पेज खोलें और फ़ील्ड पहचानें।');return;}
+    final facts=TextEditingController(text:documentText.isEmpty?'':'दस्तावेज़ से निकला टेक्स्ट (पहले खुद जाँचें):\\n'+documentText);
+    final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      title:const Text('प्रारंभिक पात्रता जाँच'),
+      content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+        const Text('अपनी उम्र, शिक्षा, राज्य/श्रेणी जैसी केवल ज़रूरी जानकारी लिखें। निकाला गया दस्तावेज़ टेक्स्ट गलत हो सकता है—पहले जाँचें। यह जानकारी AI को भेजी जाएगी। परिणाम केवल प्रारंभिक जाँच है, आधिकारिक निर्णय नहीं।',style:TextStyle(fontSize:12,color:muted)),
+        const SizedBox(height:10),
+        TextField(controller:facts,minLines:4,maxLines:8,decoration:const InputDecoration(labelText:'पात्रता जाँच के लिए जानकारी'))
+      ])),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('रद्द करें')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('जाँचें'))]
+    ));
+    if(ok!=true){facts.dispose();return;}
+    if(facts.text.trim().isEmpty){facts.dispose();note(context,'पहले अपनी सही जानकारी लिखें।');return;}
+    setState(()=>aiAnswer='पात्रता की शर्तें पढ़ी जा रही हैं…');
+    try{
+      final prompt='केवल इस पेज पर दिए गए आधिकारिक पाठ के आधार पर प्रारंभिक पात्रता तुलना करो। URL: '+urlController.text+'\\nआधिकारिक पेज का दिखने वाला पाठ: '+pageText.substring(0,pageText.length>6500?6500:pageText.length)+'\\nउपयोगकर्ता द्वारा जाँची गई जानकारी: '+facts.text.trim()+'\\nउत्तर हिंदी में दो: (1) सूचना में लिखी हर प्रासंगिक शर्त और उसका स्रोत-पाठ, (2) जानकारी से मेल/न-मेल/अज्ञात, (3) कौन-से दस्तावेज़ या तथ्य अभी चाहिए। कोई नियम, तारीख, आयु-सीमा, छूट या पात्रता स्वयं मत गढ़ो। अगर सूचना में शर्त साफ़ नहीं है तो अज्ञात कहो। अंतिम निर्णय विभाग/आधिकारिक पोर्टल का होगा; इसे आवेदन की गारंटी मत बताना।';
+      final prefs=await SharedPreferences.getInstance();
+      final worker=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+      final uri=Uri.tryParse(worker);
+      if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('Cloudflare Worker URL गलत है');
+      final client=io.HttpClient()..connectionTimeout=const Duration(seconds:20);
+      String answer='';
+      try{
+        final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
+        req.headers.contentType=io.ContentType.json;
+        req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));
+        final res=await req.close().timeout(const Duration(seconds:40));
+        final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
+        if(res.statusCode<200||res.statusCode>=300)throw Exception('AI server HTTP '+res.statusCode.toString());
+        final data=jsonDecode(body);
+        answer=(data is Map?data['answer']:null)?.toString().trim()??'';
+      }finally{client.close(force:true);}
+      if(mounted)setState(()=>aiAnswer=answer.isEmpty?'AI ने कोई परिणाम नहीं दिया।':answer);
+    }catch(_){if(mounted)setState(()=>aiAnswer='प्रारंभिक पात्रता जाँच नहीं हो सकी। आधिकारिक सूचना और जानकारी खुद जाँचें।');}
+    finally{facts.dispose();}
+  }
   @override Widget build(BuildContext c)=>Column(children:[
     Padding(padding:const EdgeInsets.fromLTRB(14,2,8,8),child:Row(children:[
       const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('LIVE FORM',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1,color:navy,fontSize:16)),Text('चैट के साथ वेबसाइट पर काम करो',style:TextStyle(fontSize:11,color:muted))])),
@@ -631,6 +668,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       OutlinedButton.icon(onPressed:loading||analyzing?null:inspect,icon:const Icon(Icons.document_scanner_outlined),label:Text(analyzing?'पहचान रहे हैं…':'फ़ील्ड पहचानें')),
       OutlinedButton.icon(onPressed:fields.isEmpty||analyzing?null:()=>fillFields(),icon:const Icon(Icons.edit_note),label:const Text('खुद भरें')),
       FilledButton.icon(onPressed:fields.isEmpty||analyzing?null:aiFillFields,icon:const Icon(Icons.auto_awesome),label:const Text('AI से भरें')),
+      OutlinedButton.icon(onPressed:analyzing?null:checkEligibility,icon:const Icon(Icons.verified_user_outlined),label:const Text('पात्रता जाँचें')),
       IconButton(onPressed:askAI,tooltip:'फॉर्म समझाएँ',icon:const Icon(Icons.help_outline))
     ])),
     const Padding(padding:EdgeInsets.fromLTRB(10,0,10,7),child:Text('OTP, CAPTCHA, पासवर्ड, भुगतान और अंतिम सबमिट उपयोगकर्ता के नियंत्रण में रहेंगे।',textAlign:TextAlign.center,style:TextStyle(fontSize:10,color:muted)))

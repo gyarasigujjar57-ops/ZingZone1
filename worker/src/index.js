@@ -103,7 +103,8 @@ export default {
       if (!upstream.ok) {
         return json({
           error: "Gemini could not complete the request.",
-          upstream_status: upstream.status
+          upstream_status: upstream.status,
+          diagnostic: data && data.error && data.error.message ? data.error.message : "Gemini rejected the request."
         }, 502);
       }
       const answer = (data && data.candidates && data.candidates[0] &&

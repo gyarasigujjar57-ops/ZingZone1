@@ -60,11 +60,6 @@ jobs:
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
-      - name: Print Android signing fingerprints for Firebase setup
-        continue-on-error: true
-        run: |
-          cd android
-          ./gradlew signingReport
       - name: Build release APK
         run: |
           for attempt in 1 2 3; do

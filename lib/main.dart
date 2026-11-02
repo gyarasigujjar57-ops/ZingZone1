@@ -439,7 +439,13 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       final picked=await documentPicker.pickImage(source:ImageSource.gallery);
       if(picked==null||!mounted)return;
       setState(()=>readingDocument=true);
-      final image=InputImage.fromFilePath(picked.path);
+      final cropped=await ImageCropper().cropImage(
+        sourcePath:picked.path,maxWidth:1800,maxHeight:2400,
+        compressFormat:ImageCompressFormat.jpg,compressQuality:90,
+        uiSettings:[AndroidUiSettings(toolbarTitle:'दस्तावेज़ सीधा करें',toolbarColor:Colors.white,toolbarWidgetColor:navy,initAspectRatio:CropAspectRatioPreset.original,lockAspectRatio:false)],
+      );
+      if(cropped==null||!mounted)return;
+      final image=InputImage.fromFilePath(cropped.path);
       final latin=TextRecognizer(script:TextRecognitionScript.latin);
       final devanagari=TextRecognizer(script:TextRecognitionScript.devanagari);
       String latinText='', devanagariText='';

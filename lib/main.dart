@@ -414,6 +414,12 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       });
   }
   @override void dispose(){urlController.dispose();super.dispose();}
+  Future<void> openDemoForm() async {
+    const html = '''<!doctype html><html lang="hi"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Zing Zone Safe Demo Form</title><body style="font:16px Arial;padding:18px;max-width:650px;margin:auto"><h2>डेमो आवेदन फ़ॉर्म</h2><p>यह केवल परीक्षण के लिए नकली जानकारी वाला फ़ॉर्म है। कोई डेटा कहीं जमा नहीं होगा।</p><form onsubmit="event.preventDefault();document.getElementById('result').textContent='डेमो: सबमिट बटन दबाया गया — कोई डेटा भेजा नहीं गया।';"><label for="applicant_name">आवेदक का पूरा नाम</label><input id="applicant_name" name="applicant_name" autocomplete="name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="father_name">पिता का नाम</label><input id="father_name" name="father_name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="dob">जन्मतिथि</label><input id="dob" name="dob" type="date" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="qualification">शैक्षणिक योग्यता</label><select id="qualification" name="qualification" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><option value="">चुनें</option><option value="12th">12वीं</option><option value="graduate">स्नातक</option><option value="postgraduate">स्नातकोत्तर</option></select><label for="marks">प्राप्त अंक (0 से 100)</label><input id="marks" name="marks" type="number" min="0" max="100" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="email">ईमेल</label><input id="email" name="email" type="email" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label><input type="checkbox" name="consent"> यह डेमो चेकबॉक्स है (AI इसे नहीं छुएगा)</label><p id="result"></p><button type="submit">डेमो सबमिट (स्थानीय)</button></form></body></html>''';
+    setState(() { pageText=''; fields=[]; aiAnswer=''; });
+    await web.loadHtmlString(html);
+    if(mounted) note(context,'डेमो फ़ॉर्म खुल गया। पहले फ़ील्ड पहचानें, फिर AI से भरें।');
+  }
   Future<void> openSite() async {
     var raw=urlController.text.trim();
     if(raw.isEmpty){note(context,'पहले आधिकारिक वेबसाइट का पता डालो।');return;}
@@ -562,6 +568,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
   @override Widget build(BuildContext c)=>Column(children:[
     Padding(padding:const EdgeInsets.fromLTRB(14,2,8,8),child:Row(children:[
       const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('LIVE FORM',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1,color:navy,fontSize:16)),Text('चैट के साथ वेबसाइट पर काम करो',style:TextStyle(fontSize:11,color:muted))])),
+      TextButton.icon(onPressed:loading||analyzing?null:openDemoForm,icon:const Icon(Icons.science_outlined,size:16),label:const Text('डेमो फ़ॉर्म')),
       IconButton(onPressed:()=>Navigator.of(c).pop(),icon:const Icon(Icons.close),tooltip:'Live form बंद करें')
     ])),
     Padding(padding:const EdgeInsets.symmetric(horizontal:10),child:Row(children:[

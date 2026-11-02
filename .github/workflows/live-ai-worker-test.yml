@@ -122,3 +122,5 @@ jobs:
             exit 1
           fi
           echo "PASS: Gemini read the actual text contained in the uploaded image."
+
+# Run this check after each Worker implementation change.

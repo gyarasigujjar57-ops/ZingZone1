@@ -53,16 +53,57 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json
+          import base64, json, struct, zlib
+          text = "ZING_IMAGE_PROOF_8271"
+          font = {
+              "Z":["11111","00001","00010","00100","01000","10000","11111"],
+              "I":["11111","00100","00100","00100","00100","00100","11111"],
+              "N":["10001","11001","10101","10011","10001","10001","10001"],
+              "G":["01110","10001","10000","10111","10001","10001","01110"],
+              "_":["00000","00000","00000","00000","00000","00000","11111"],
+              "M":["10001","11011","10101","10101","10001","10001","10001"],
+              "A":["01110","10001","10001","11111","10001","10001","10001"],
+              "E":["11111","10000","10000","11110","10000","10000","11111"],
+              "P":["11110","10001","10001","11110","10000","10000","10000"],
+              "R":["11110","10001","10001","11110","10100","10010","10001"],
+              "O":["01110","10001","10001","10001","10001","10001","01110"],
+              "F":["11111","10000","10000","11110","10000","10000","10000"],
+              "8":["01110","10001","10001","01110","10001","10001","01110"],
+              "2":["01110","10001","00001","00010","00100","01000","11111"],
+              "7":["11111","00001","00010","00100","01000","01000","01000"],
+              "1":["00100","01100","00100","00100","00100","00100","01110"]
+          }
+          scale, margin = 8, 12
+          logical_w = len(text) * 6
+          logical_h = 7
+          width = logical_w * scale + margin * 2
+          height = logical_h * scale + margin * 2
+          bitmap = [[255 for _ in range(width)] for _ in range(height)]
+          for i, ch in enumerate(text):
+              for y, row in enumerate(font[ch]):
+                  for x, bit in enumerate(row):
+                      if bit == "1":
+                          for sy in range(scale):
+                              for sx in range(scale):
+                                  bitmap[margin + y*scale + sy][margin + (i*6+x)*scale + sx] = 0
+          raw = b"".join(b"\\x00" + bytes(v for p in row for v in (p,p,p)) for row in bitmap)
+          def chunk(kind, data):
+              return struct.pack(">I",len(data)) + kind + data + struct.pack(">I",zlib.crc32(kind+data)&0xffffffff)
+          png = (b"\\x89PNG\\r\\n\\x1a\\n" +
+                 chunk(b"IHDR",struct.pack(">IIBBBBB",width,height,8,2,0,0,0)) +
+                 chunk(b"IDAT",zlib.compress(raw,9)) +
+                 chunk(b"IEND",b""))
+          image = base64.b64encode(png).decode()
+          assert base64.b64decode(image,validate=True) == png
           payload = {
               "messages": [{
                   "role": "user",
                   "text": "Read the exact uppercase code printed in the attached image. Reply with only the code, no explanation."
               }],
-              "image": {"mimeType": "image/png", "data": "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"}
+              "image": {"mimeType":"image/png","data":image}
           }
-          with open("image-request.json", "w") as f:
-              json.dump(payload, f)
+          with open("image-request.json","w") as f:
+              json.dump(payload,f)
           PY
           code=$(curl --silent --show-error --max-time 50 \
             -o image-response.json -w "%{http_code}" \

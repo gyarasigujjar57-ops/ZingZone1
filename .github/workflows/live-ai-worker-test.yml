@@ -49,3 +49,24 @@ jobs:
             exit 1
           fi
           echo "PASS: Cloudflare Worker reached Gemini and returned an answer."
+      - name: Verify image understanding through Worker
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 45 \
+            -o image-response.json -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data '{"messages":[{"role":"user","text":"Look at the attached test image. Reply with exactly: ZING_IMAGE_OK"}],"image":{"mimeType":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZ0AAAAASUVORK5CYII="}}' \
+            "https://zing-zone-ai.gyarasigujjar57.workers.dev")
+          echo "HTTP status: $code"
+          if [ "$code" != "200" ]; then
+            jq '{error, upstream_status}' image-response.json 2>/dev/null || cat image-response.json
+            exit 1
+          fi
+          answer=$(jq -r '.answer // empty' image-response.json)
+          if ! printf '%s' "$answer" | grep -q 'ZING_IMAGE_OK'; then
+            echo "Image request returned no expected acknowledgement."
+            jq '{answer,error}' image-response.json
+            exit 1
+          fi
+          echo "PASS: Worker accepted the image and returned a Gemini response."

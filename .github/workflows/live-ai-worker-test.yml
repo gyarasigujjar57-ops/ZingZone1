@@ -49,24 +49,36 @@ jobs:
             exit 1
           fi
           echo "PASS: Cloudflare Worker reached Gemini and returned an answer."
-      - name: Verify image understanding through Worker
+      - name: Verify actual image OCR through Worker
         run: |
           set -euo pipefail
-          code=$(curl --silent --show-error --max-time 45 \
+          python3 - <<'PY'
+          import json
+          image = "iVBORw0KGgoAAAANSUhEUgAABBAAAAB4CAIAAADE75aDAAADf0lEQVR42u3dwXLCIBRA0abj//9yuujGafqYBy8wqOcsrRpC3Fyw5jjP8wsAAOA/36YAAAAQDAAAgGAAAAAEAwAAIBgAAADBAAAACAYAAEAwAAAAggEAABAMAACAYAAAABAMAACAYAAAAAQDAAAgGAAAAMEAAAAIBgAAQDAAAACCAQAAEAwAAIBgAAAAEAwAAIBgAAAABAMAACAYAAAAwQAAAAgGAABAMAAAAIIBAAAQDAAAgGAAAAAQDAAAgGAAAAAEAwAAIBgAAADBAAAACAYAAEAwAAAAggEAABAMAACAYAAAAAQDAACAYAAAAPIeYy87jqPx1/M8/zzz+kjmme0jRs9sjzkzksxfM2POjzw/n71XJH+s+llUXlWfgbHZjj4PvTPZ+2kEAHgVdhgAAIDQ4A7D2DrxmGhnILO6P0/mTHtHXj+XaBU8c6zomb2PV15VmYHMEaMr8vtI/lN9fU8AgHdlhwEAAAg97nqjGev97dXxHVZ2M+vWe468fk17z739qpXX665PIADAJ7HDAAAAhG7YYRhbLa6vNN+1ynsdSfsb6vXVcevTM0TXy2wDAFTYYQAAAEKP1xruPuvHvf+HMHY3hrHv3GfeYc+V+Mqo1vzKEwDAp7HDAAAAhEo7DOtXYfP35V05ksxsZEY+4z4M+ZncYU19zdHtHgAA5NlhAAAAQoM7DHet0bbvS9D+pf8ZZpzXPrsivVeh/UtWmXtN9O7DzJY5uv0HAIBndhgAAIDQDf/DcDVjdfb5WDPul5x5z7G15/zIV85nfWbao1p/V4TMPkk0z/YTAAAidhgAAIDQ8R5rq+2dgVc/x/c+OzMAALAzOwwAAEDosDoLAABE7DAAAACCAQAAEAwAAIBgAAAABAMAACAYAAAAwQAAAAgGAABAMAAAAIIBAAAQDAAAAIIBAAAQDAAAgGAAAAAEAwAAIBgAAADBAAAACAYAAEAwAAAAggEAABAMAAAAggEAABAMAACAYAAAAAQDAAAgGAAAAMEAAAAIBgAAQDAAAACCAQAAEAwAAACCAQAAEAwAAIBgAAAABAMAACAYAAAAwQAAAAgGAABAMAAAAIIBAAAQDAAAgGAAAAAQDAAAgGAAAAAEAwAAIBgAAADBAAAACAYAAEAwAAAAggEAABAMAACAYAAAABAMAACAYAAAAAQDAAAgGAAAAMEAAABs4gcxanTalgJKHQAAAABJRU5ErkJggg=="
+          payload = {
+              "messages": [{
+                  "role": "user",
+                  "text": "Read the exact uppercase code printed in the attached image. Reply with only the code, no explanation."
+              }],
+              "image": {"mimeType": "image/png", "data": image}
+          }
+          with open("image-request.json", "w") as f:
+              json.dump(payload, f)
+          PY
+          code=$(curl --silent --show-error --max-time 50 \
             -o image-response.json -w "%{http_code}" \
             -H "Content-Type: application/json" \
-            -X POST \
-            --data '{"messages":[{"role":"user","text":"Look at the attached test image. Reply with exactly: ZING_IMAGE_OK"}],"image":{"mimeType":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZ0AAAAASUVORK5CYII="}}' \
+            --data-binary @image-request.json \
             "https://zing-zone-ai.gyarasigujjar57.workers.dev")
           echo "HTTP status: $code"
           if [ "$code" != "200" ]; then
             jq '{error, upstream_status}' image-response.json 2>/dev/null || cat image-response.json
             exit 1
           fi
-          answer=$(jq -r '.answer // empty' image-response.json)
-          if ! printf '%s' "$answer" | grep -q 'ZING_IMAGE_OK'; then
-            echo "Image request returned no expected acknowledgement."
+          answer=$(jq -r '.answer // empty' image-response.json | tr -d '\r\n `')
+          if [ "$answer" != "ZING_IMAGE_PROOF_8271" ]; then
+            echo "Image OCR did not return the exact text from the test image."
             jq '{answer,error}' image-response.json
             exit 1
           fi
-          echo "PASS: Worker accepted the image and returned a Gemini response."
+          echo "PASS: Gemini read the actual text contained in the uploaded image."

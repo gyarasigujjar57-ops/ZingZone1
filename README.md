@@ -5,7 +5,7 @@ Zing Zone is a Flutter Android prototype with Firebase sign-in, AI chat, and an 
 ## Backend
 - Cloudflare Worker: `https://zing-zone-ai.gyarasigujjar57.workers.dev`
 - AI provider: Gemini API via the Cloudflare secret binding `GEMINI_API_KEY`.
-- Text chat is live-tested. Image OCR is currently under verification.
+- Live Worker health, text reply, and image OCR tests passed in GitHub Actions on 2026-11-02.
 
 ## Live Form scope
 The current feature branch can open an HTTPS website in an in-app WebView, inspect visible page labels and normal controls, ask the AI for draft values, and fill selected ordinary fields after user review. It does not submit forms. OTP, passwords, CAPTCHA, payments, consent and final submission stay with the user.

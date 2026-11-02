@@ -100,3 +100,5 @@ jobs:
 # Re-trigger APK build after live AI chat fixes.
 
 # Rebuild after live form validation and offline demo form updates.
+
+# Rebuild with the latest OCR, crop, and preliminary eligibility implementation.

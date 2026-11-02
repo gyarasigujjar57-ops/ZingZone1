@@ -50,16 +50,16 @@ jobs:
           text = gradle.read_text()
           dependency = '    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")'
           if dependency not in text:
-              text = text.replace("dependencies {", "dependencies {\\n" + dependency, 1)
+              text = text.replace("dependencies {", "dependencies {\n" + dependency, 1)
           gradle.write_text(text)
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           xml = manifest.read_text()
           activity = '''        <activity
                   android:name="com.yalantis.ucrop.UCropActivity"
                   android:screenOrientation="portrait"
-                  android:theme="@style/Theme.AppCompat.Light.NoActionBar" />'''
+                  android:theme="@style/Ucrop.CropTheme" />'''
           if "com.yalantis.ucrop.UCropActivity" not in xml:
-              xml = xml.replace("</application>", activity + "\\n    </application>")
+              xml = xml.replace("</application>", activity + "\n    </application>")
           manifest.write_text(xml)
           PY
       - name: Get dependencies

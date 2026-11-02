@@ -66,7 +66,7 @@ export default {
         return json({ error: "Image data is not valid base64." }, 400);
       }
       contents[contents.length - 1].parts.push({
-        inline_data: { mime_type: image.mimeType, data: image.data }
+        inlineData: { mimeType: image.mimeType, data: image.data }
       });
     }
 

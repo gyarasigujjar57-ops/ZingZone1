@@ -447,7 +447,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       if(cropped==null||!mounted)return;
       final image=InputImage.fromFilePath(cropped.path);
       final latin=TextRecognizer(script:TextRecognitionScript.latin);
-      final devanagari=TextRecognizer(script:TextRecognitionScript.devanagari);
+      final devanagari=TextRecognizer(script:TextRecognitionScript.devanagiri);
       String latinText='', devanagariText='';
       try { latinText=(await latin.processImage(image)).text; } finally { await latin.close(); }
       try { devanagariText=(await devanagari.processImage(image)).text; } finally { await devanagari.close(); }

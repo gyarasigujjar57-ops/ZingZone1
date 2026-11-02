@@ -497,9 +497,24 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       final safe=fields.where((f)=>['input','select','textarea'].contains(f['tag'])&&!['password','hidden','file','submit','button','reset','checkbox','radio','image'].contains((f['type']??'').toString().toLowerCase())&&f['disabled']!=true).toList();
       final schema=safe.map((f)=>{'index':f['index'],'label':f['label'],'name':f['name'],'tag':f['tag'],'type':f['type'],'required':f['required'],'options':f['options']}).toList();
       final prompt='You help prepare form values. Return ONLY valid JSON object mapping field index strings to suggested values, e.g. {"0":"value","1":"value"}. Use ONLY explicit user-provided facts below; do not infer or invent missing identity facts. If a value is unknown or ambiguous, omit that field. For select fields, use one exact available option value when possible. Never fill password, OTP, CAPTCHA, file upload, payment, bank/card, checkbox/radio, or submit fields. This is a draft for user review, not submission.\nCurrent page URL: '+urlController.text+'\nVisible page text: '+pageText.substring(0,pageText.length>3500?3500:pageText.length)+'\nAllowed fields JSON: '+jsonEncode(schema)+'\nUser-provided facts: '+info.text.trim();
-      final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('Return only valid JSON. Never invent personal data. Protect sensitive credentials.'));
-      final response=await model.generateContent([Content.text(prompt)]);
-      final raw=(response.text??'').trim().replaceAll(RegExp(r'^```(?:json)?\s*|\s*```$'), '');
+      final prefs=await SharedPreferences.getInstance();
+      final worker=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+      final uri=Uri.tryParse(worker);
+      if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('Cloudflare Worker URL गलत है');
+      final client=io.HttpClient()..connectionTimeout=const Duration(seconds:20);
+      String aiText;
+      try{
+        final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
+        req.headers.contentType=io.ContentType.json;
+        req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));
+        final res=await req.close().timeout(const Duration(seconds:40));
+        final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
+        if(res.statusCode<200||res.statusCode>=300)throw Exception('AI server HTTP '+res.statusCode.toString());
+        final d=jsonDecode(body);
+        aiText=(d is Map?d['answer']:null)?.toString().trim()??'';
+        if(aiText.isEmpty)throw Exception('AI ने खाली जवाब दिया');
+      }finally{client.close(force:true);}
+      final raw=aiText.replaceAll(RegExp(r'^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$'), '');
       final decoded=jsonDecode(raw);
       if(decoded is! Map)throw const FormatException('AI output was not a JSON object');
       final suggestions=<int,String>{};

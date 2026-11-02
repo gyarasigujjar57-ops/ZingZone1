@@ -1,27 +1,35 @@
 # Zing Zone implementation status
 
-Last updated: 2026-10-12
+Last checked: 2026-11-02
 
-## Current verified repository state
-- Flutter APK build workflow #45 completed successfully for commit `ab32a54ac8368e29e6b00796b4635fa0e80fe4cb`.
-- Chat UI now calls the Firebase callable function `askZingAI` in `asia-south1`.
-- Google Sign-in and phone SMS OTP flows are wired to Firebase Authentication in the Flutter source.
-- These are code integrations only. The live sign-in flows still need device-side testing and correct Firebase/OAuth configuration.
-- The callable AI function source exists under `functions/src/index.ts`, but it has not been confirmed deployed; the Gemini secret has not been confirmed set.
-- Store catalogue/cart/wishlist still use demo/local data. Wallet, tokens, rewards and Premium are not live financial services.
-- Operator workspace, isolated customer sessions, and official portal integrations are not complete.
+## Verified infrastructure
+- GitHub repository: `gyarasigujjar57-ops/ZingZone1`.
+- Cloudflare Worker `zing-zone-ai` is deployed and active.
+- Cloudflare Worker has a `GEMINI_API_KEY` secret binding. The secret value was not read or copied.
+- Worker health check and a text-only Gemini request passed in GitHub Actions before the latest multimodal change.
+- The Worker was updated to forward supported image data to Gemini. The first real image OCR test returned Gemini HTTP 400; the Worker now returns a sanitized diagnostic so the next test can identify the cause.
+- GitHub PR #1 (`feature/live-form-chat-panel` into `main`) remains unmerged. All new form changes are still on that branch until CI and review pass.
 
-## Next steps to activate and verify AI
-1. Confirm the Firebase project billing plan and current Cloud Functions deployment requirements before enabling billing. Do not enable billing without understanding potential charges.
-2. Create/get a Gemini API key through the official Google AI Studio / Google AI API process.
-3. Store the key as the Firebase Functions secret `GEMINI_API_KEY`. Never put it in Flutter source, a public GitHub file, or a chat message.
-4. Build and deploy the Functions code and Firestore rules using an authenticated Firebase CLI environment.
-5. Test `askZingAI` from a signed-in Android account. A successful APK build alone does not prove the function is deployed or callable.
-6. Test Phone OTP and Google sign-in on a real Android device; resolve Firebase provider, SHA-1/SHA-256 and OAuth configuration issues if shown.
+## App features in source
+- Firebase Authentication login flows (Google and phone OTP) are present; real-device sign-in is not verified.
+- Text chat sends requests to the Cloudflare Worker by default and retains Firebase fallback code.
+- Chat history and drafts are stored locally on the device; cloud sync is not verified.
+- The Live Form panel opens HTTPS pages in an in-app WebView, reads visible page text and ordinary form controls, and supports user-reviewed filling of normal text/select/textarea fields.
+- AI draft suggestions for Live Form now call the Cloudflare Worker. This latest change still needs a passing APK build and device test.
+- Chat image selection sends an image payload to the Worker. Actual image OCR is not yet verified; the current image test is failing.
+- PDF document selection/OCR is not implemented yet.
+- Store, Rewards, Wallet and Premium are not verified live financial services; treat them as prototype/demo UI until separate payment and ledger tests pass.
 
-## Security and product notes
-- The callable function currently requires Firebase Authentication, but App Check enforcement is disabled. Before production, add App Check and abuse/rate-limit controls.
-- Keep Firestore rules restrictive. Never accept client-submitted wallet balances, token balances, reward grants, purchases or payout status as authoritative.
-- Government-form automation must respect portal terms and stop for OTP, CAPTCHA, biometrics, payments and final legal submission.
-- Real-money rewards, prize pools, ads and payouts need legal and platform-policy review before activation.
-- Passing APK build and tests is not proof that all live integrations work.
+## CI status
+- A previous APK workflow run (#115) passed, but it predates the latest form and image changes.
+- The next APK workflow runs are in progress after the latest commits. Do not treat them as successful until their final conclusion is green.
+- The Live AI Worker text test passed on 2026-11-02.
+- The real image OCR test failed with Gemini upstream HTTP 400. A follow-up diagnostic test is required.
+
+## Safety, privacy and production requirements
+- Do not enter OTPs, passwords, CAPTCHA answers, bank/card credentials, or biometric secrets into AI prompts.
+- The user must personally handle OTP, CAPTCHA, consent, payments and final submission.
+- Only send document information to Gemini after clear user consent. Avoid storing raw identity documents unless necessary and protected.
+- Add authenticated request validation, rate limits/abuse controls, and production monitoring before public release. CORS is not authentication.
+- Government portal terms and each portal's compatibility must be checked individually.
+- A successful Worker response or APK build does not prove that all app features work on a real phone.

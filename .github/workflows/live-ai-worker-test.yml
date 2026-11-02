@@ -122,5 +122,23 @@ jobs:
             exit 1
           fi
           echo "PASS: Gemini read the actual text contained in the uploaded image."
+      - name: Verify AI form draft values through Worker
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --max-time 45 \
+            -o form-response.json \
+            -H "Content-Type: application/json" \
+            --data '{"messages":[{"role":"user","text":"Return ONLY a JSON object mapping field index strings to values. Do not use Markdown. Allowed fields: index 0 is a Full name text input; index 1 is a State select with exact options Rajasthan and Haryana. User-provided facts: Full name is TEST PERSON; State is Rajasthan. Return exactly {\"0\":\"TEST PERSON\",\"1\":\"Rajasthan\"}."}]}' \
+            "https://zing-zone-ai.gyarasigujjar57.workers.dev"
+          python3 - <<'PY'
+          import json
+          response = json.load(open("form-response.json"))
+          answer = response.get("answer", "").strip()
+          answer = answer.removeprefix("```json").removesuffix("```").strip()
+          values = json.loads(answer)
+          assert values.get("0") == "TEST PERSON", values
+          assert values.get("1") == "Rajasthan", values
+          print("PASS: Gemini returned valid draft values for the supplied form schema.")
+          PY
 
 # Run this check after each Worker implementation change.

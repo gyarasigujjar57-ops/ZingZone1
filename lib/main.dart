@@ -421,7 +421,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     final uri=Uri.tryParse(raw);
     if(uri==null||uri.scheme!='https'||!uri.hasAuthority){note(context,'सही HTTPS वेबसाइट का पता डालो।');return;}
     final host=uri.host.toLowerCase();
-    if(!(host.endsWith('.gov.in')||host=='gov.in'||host.endsWith('.nic.in')||host=='nic.in'||host.contains('joinindianarmy'))) {
+    if(!(host=='gov.in'||host.endsWith('.gov.in')||host=='nic.in'||host.endsWith('.nic.in'))) {
       final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
         title:const Text('वेबसाइट की पुष्टि'),
         content:Text('यह पता सामान्य सरकारी डोमेन जैसा नहीं दिखता: '+host+'. आगे बढ़ने से पहले इसकी आधिकारिकता जाँचो।'),
@@ -535,6 +535,12 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
 
   Future<void> askAI() async {
     if(pageText.isEmpty&&fields.isEmpty){note(context,'पहले वेबसाइट खोलकर फ़ील्ड पहचानो।');return;}
+    final consent=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      title:const Text('वेबसाइट का पाठ AI को भेजें?'),
+      content:const Text('AI इस पेज का दिखने वाला पाठ और फ़ील्ड लेबल Cloudflare/Gemini को भेजेगा। अगर पेज पर निजी या गोपनीय जानकारी है, तो पहले उसे जाँचें। OTP, पासवर्ड और बैंक/कार्ड विवरण कभी न भेजें।'),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('रद्द करें')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('भेजें और समझाएँ'))]
+    ));
+    if(consent!=true)return;
     setState(()=>aiAnswer='AI मदद तैयार हो रही है…');
     try{
       final prefs=await SharedPreferences.getInstance();

@@ -83,3 +83,5 @@ jobs:
           retention-days: 14
 
 # Re-trigger APK build after live AI chat fixes.
+
+# Rebuild after live form validation and offline demo form updates.

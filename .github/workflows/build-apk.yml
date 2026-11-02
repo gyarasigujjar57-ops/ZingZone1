@@ -42,6 +42,26 @@ jobs:
           a = re.sub(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "com.gyarasigujjar57.zingzone"', a, count=1)
           app.write_text(a)
           PY
+      - name: Configure Devanagari OCR and image cropper Android components
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle = Path("android/app/build.gradle.kts")
+          text = gradle.read_text()
+          dependency = '    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")'
+          if dependency not in text:
+              text = text.replace("dependencies {", "dependencies {\\n" + dependency, 1)
+          gradle.write_text(text)
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          xml = manifest.read_text()
+          activity = '''        <activity
+                  android:name="com.yalantis.ucrop.UCropActivity"
+                  android:screenOrientation="portrait"
+                  android:theme="@style/Theme.AppCompat.Light.NoActionBar" />'''
+          if "com.yalantis.ucrop.UCropActivity" not in xml:
+              xml = xml.replace("</application>", activity + "\\n    </application>")
+          manifest.write_text(xml)
+          PY
       - name: Get dependencies
         run: flutter pub get
       - name: Analyze

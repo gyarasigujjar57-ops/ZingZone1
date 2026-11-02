@@ -1,11 +1,21 @@
-# ZingZone1
+# Zing Zone
 
-AI chat backend: Cloudflare Worker `zing-zone-ai` proxies requests to Gemini. The app uses the Worker HTTPS endpoint for text chat.
+Zing Zone is a Flutter Android prototype with Firebase sign-in, AI chat, and an in-app Live Form panel.
 
-## APK build
+## Backend
+- Cloudflare Worker: `https://zing-zone-ai.gyarasigujjar57.workers.dev`
+- AI provider: Gemini API via the Cloudflare secret binding `GEMINI_API_KEY`.
+- Text chat is live-tested. Image OCR is currently under verification.
 
-GitHub Actions builds the Android release APK on pushes to `feature/live-form-chat-panel` or `main`. The artifact is named `zing-zone-release-apk`.
+## Live Form scope
+The current feature branch can open an HTTPS website in an in-app WebView, inspect visible page labels and normal controls, ask the AI for draft values, and fill selected ordinary fields after user review. It does not submit forms. OTP, passwords, CAPTCHA, payments, consent and final submission stay with the user.
 
-## Live AI status
+PDF upload/OCR, external floating overlay, broad portal compatibility, cloud-synced history, real Store payments and wallet payouts are not yet verified.
 
-The Cloudflare Worker has now passed the live Gemini reply test. A successful APK build verifies the Android package; install and on-device chat testing are still required.
+## Development
+- Flutter APK workflow: `.github/workflows/build-apk.yml`
+- Worker source: `worker/src/index.js`
+- Worker config: `worker/wrangler.toml`
+- Current detailed status: `docs/IMPLEMENTATION_STATUS.md`
+
+Do not treat a green CI run as proof of real-device behavior. Test sign-in, text chat, image reading and each target portal on an Android device before release.

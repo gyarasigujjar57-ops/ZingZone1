@@ -407,8 +407,9 @@ class LiveFormPanel extends StatefulWidget {
 class _LiveFormPanelState extends State<LiveFormPanel> {
   final urlController = TextEditingController();
   late final WebViewController web;
-  bool loading=false, analyzing=false;
-  String pageText='', aiAnswer='';
+  bool loading=false, analyzing=false, readingDocument=false;
+  String pageText='', aiAnswer='', documentText='';
+  final ImagePicker documentPicker=ImagePicker();
   List<Map<String,dynamic>> fields=[];
   @override void initState() {
     super.initState();
@@ -430,6 +431,26 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       });
   }
   @override void dispose(){urlController.dispose();super.dispose();}
+  Future<void> readDocument() async {
+    if(readingDocument)return;
+    try {
+      final picked=await documentPicker.pickImage(source:ImageSource.gallery);
+      if(picked==null||!mounted)return;
+      setState(()=>readingDocument=true);
+      final image=InputImage.fromFilePath(picked.path);
+      final latin=TextRecognizer(script:TextRecognitionScript.latin);
+      final devanagari=TextRecognizer(script:TextRecognitionScript.devanagari);
+      String latinText='', devanagariText='';
+      try { latinText=(await latin.processImage(image)).text; } finally { await latin.close(); }
+      try { devanagariText=(await devanagari.processImage(image)).text; } finally { await devanagari.close(); }
+      final combined=[if(devanagariText.trim().isNotEmpty)'देवनागरी:\\n'+devanagariText.trim(),if(latinText.trim().isNotEmpty)'Latin/अंक:\\n'+latinText.trim()].join('\\n\\n');
+      if(!mounted)return;
+      setState(()=>documentText=combined.length>6500?combined.substring(0,6500):combined);
+      if(documentText.trim().isEmpty)note(context,'इस तस्वीर से साफ़ टेक्स्ट नहीं मिला। साफ़ फोटो लेकर दोबारा कोशिश करें।');
+      else note(context,'दस्तावेज़ का टेक्स्ट फ़ोन पर निकाला गया। AI को भेजने से पहले उसे जाँचें।');
+    }catch(_){if(mounted)note(context,'दस्तावेज़ पढ़ा नहीं जा सका। साफ़ तस्वीर चुनें।');}
+    finally{if(mounted)setState(()=>readingDocument=false);}
+  }
   Future<void> openDemoForm() async {
     const html = '''<!doctype html><html lang="hi"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Zing Zone Safe Demo Form</title><body style="font:16px Arial;padding:18px;max-width:650px;margin:auto"><h2>डेमो आवेदन फ़ॉर्म</h2><p>यह केवल परीक्षण के लिए नकली जानकारी वाला फ़ॉर्म है। कोई डेटा कहीं जमा नहीं होगा।</p><form onsubmit="event.preventDefault();document.getElementById('result').textContent='डेमो: सबमिट बटन दबाया गया — कोई डेटा भेजा नहीं गया।';"><label for="applicant_name">आवेदक का पूरा नाम</label><input id="applicant_name" name="applicant_name" autocomplete="name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="father_name">पिता का नाम</label><input id="father_name" name="father_name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="dob">जन्मतिथि</label><input id="dob" name="dob" type="date" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="qualification">शैक्षणिक योग्यता</label><select id="qualification" name="qualification" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><option value="">चुनें</option><option value="12th">12वीं</option><option value="graduate">स्नातक</option><option value="postgraduate">स्नातकोत्तर</option></select><label for="marks">प्राप्त अंक (0 से 100)</label><input id="marks" name="marks" type="number" min="0" max="100" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="email">ईमेल</label><input id="email" name="email" type="email" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label><input type="checkbox" name="consent"> यह डेमो चेकबॉक्स है (AI इसे नहीं छुएगा)</label><p id="result"></p><button type="submit">डेमो सबमिट (स्थानीय)</button></form></body></html>''';
     setState(() { pageText=''; fields=[]; aiAnswer=''; });
@@ -502,7 +523,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
   }
   Future<void> aiFillFields() async {
     if(fields.isEmpty){note(context,'पहले फ़ील्ड पहचानें।');return;}
-    final info=TextEditingController();
+    final info=TextEditingController(text:documentText.isEmpty?'':'निकाला गया दस्तावेज़ टेक्स्ट (कृपया जाँचें):\\n'+documentText);
     final confirmed=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
       title:const Text('जानकारी देकर AI से फ़ील्ड भरवाएँ'),
       content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
@@ -590,6 +611,11 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     Padding(padding:const EdgeInsets.symmetric(horizontal:10),child:Row(children:[
       Expanded(child:TextField(controller:urlController,keyboardType:TextInputType.url,autocorrect:false,decoration:const InputDecoration(isDense:true,prefixIcon:Icon(Icons.language),hintText:'आधिकारिक वेबसाइट का HTTPS पता'))),
       const SizedBox(width:5),FilledButton(onPressed:loading?null:openSite,child:const Text('खोलें'))
+    ])),
+    Padding(padding:const EdgeInsets.symmetric(horizontal:12,vertical:4),child:Row(children:[
+      OutlinedButton.icon(onPressed:readingDocument?null:readDocument,icon:const Icon(Icons.document_scanner_outlined),label:Text(readingDocument?'दस्तावेज़ पढ़ रहे हैं…':'दस्तावेज़ से टेक्स्ट निकालें')),
+      const SizedBox(width:8),
+      if(documentText.isNotEmpty)const Expanded(child:Text('टेक्स्ट मिला • AI को भेजने से पहले जाँचें',style:TextStyle(fontSize:10,color:muted)))
     ])),
     if(loading)const LinearProgressIndicator(minHeight:2),
     Expanded(child:Stack(children:[WebViewWidget(controller:web),if(aiAnswer.isNotEmpty)Positioned(left:8,right:8,bottom:8,child:Material(elevation:4,borderRadius:BorderRadius.circular(12),child:Container(padding:const EdgeInsets.all(10),constraints:const BoxConstraints(maxHeight:125),child:SingleChildScrollView(child:Text(aiAnswer,style:const TextStyle(fontSize:12,color:navy))))))])),

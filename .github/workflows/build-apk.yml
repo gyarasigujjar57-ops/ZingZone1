@@ -69,6 +69,17 @@ jobs:
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           xml = manifest.read_text()
           manifest.write_text(xml)
+          # Define the theme referenced by the image_cropper Android activity.
+          values = Path("android/app/src/main/res/values")
+          values.mkdir(parents=True, exist_ok=True)
+          (values / "styles.xml").write_text('''<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:windowNoTitle">true</item>
+              </style>
+          </resources>
+          ''')
           PY
 
       - name: Add floating assistant overlay and opt-in browser page reader

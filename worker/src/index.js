@@ -9,7 +9,7 @@ export default {
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20) return Response.json({ error: "Send 1–20 messages" }, { status: 400, headers: cors });
     const contents = [];
     for (const m of messages) {
-      if (!m || !["user", "assistant"].includes(m.role) || typeof m.text !== "string" || !m.text.trim() || m.text.length > 8000) return Response.json({ error: "Invalid message" }, { status: 400, headers: cors });
+      if (!m || !["user", "assistant"].includes(m.role) || typeof m.text !== "string" || !m.text.trim() || m.text.length > 30000) return Response.json({ error: "Invalid message" }, { status: 400, headers: cors });
       contents.push({ role: m.role, content: m.text.trim() });
     }
     if (contents[contents.length - 1].role !== "user") return Response.json({ error: "Last message must be user" }, { status: 400, headers: cors });

@@ -911,7 +911,7 @@ class ChatMemory {
   static Future<String> loadCurrent() async {
     final prefs = await SharedPreferences.getInstance();
     final local = prefs.getString(_currentKey) ?? '';
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid)
@@ -928,7 +928,7 @@ class ChatMemory {
   static Future<void> saveCurrent(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_currentKey, value);
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
         await FirebaseFirestore.instance.collection('users').doc(user.uid)

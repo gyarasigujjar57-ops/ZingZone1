@@ -420,7 +420,13 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     web=WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (_) { if(mounted) setState(() {loading=true;fields=[];pageText='';}); },
+        onPageStarted: (_) {
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.remove('zing_live_page_text');
+            prefs.remove('zing_live_page_fields');
+          });
+          if(mounted) setState(() {loading=true;fields=[];pageText='';});
+        },
         onPageFinished: (url) {
           SharedPreferences.getInstance().then((prefs)=>prefs.setString('zing_live_current_url',url));
           if(mounted) setState(() {loading=false;urlController.text=url;});
@@ -437,6 +443,11 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
             pageText=(d['text']??'').toString();
             fields=(d['fields'] as List? ?? []).whereType<Map>().map((e)=>Map<String,dynamic>.from(e)).toList();
             analyzing=false;
+          });
+          // Keep only page text and field metadata locally for the opt-in native reader.
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setString('zing_live_page_text', (d['text']??'').toString());
+            prefs.setString('zing_live_page_fields', jsonEncode(d['fields']??[]));
           });
         } catch (_) { if(mounted) setState(()=>analyzing=false); }
       });

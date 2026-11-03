@@ -174,3 +174,5 @@ jobs:
           PY
 
 # Run this check after each Worker implementation change.
+
+# Re-run against the current Cloudflare deployment after the Worker source update.

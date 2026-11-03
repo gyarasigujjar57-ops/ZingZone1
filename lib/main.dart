@@ -958,7 +958,7 @@ class ChatMemory {
     final history = prefs.getStringList(_historyKey) ?? <String>[];
     history.insert(0, value);
     await prefs.setStringList(_historyKey, history.take(50).toList());
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
         await FirebaseFirestore.instance.collection('users').doc(user.uid)

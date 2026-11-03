@@ -421,7 +421,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (_) { if(mounted) setState(() {loading=true;fields=[];pageText='';}); },
-        onPageFinished: (url) { if(mounted) setState(() {loading=false;urlController.text=url;}); },
+        onPageFinished: (url) { SharedPreferences.getInstance().then((prefs)=>prefs.setString('zing_live_current_url',url)); if(mounted) setState(() {loading=false;urlController.text=url;}); },
       ))
       ..addJavaScriptChannel('ZingLiveForm',onMessageReceived:(message) {
         try {

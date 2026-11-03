@@ -70,7 +70,7 @@ jobs:
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           xml = manifest.read_text()
           if "android.permission.SYSTEM_ALERT_WINDOW" not in xml:
-              xml = xml.replace("<application", '<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\\n    <application', 1)
+              xml = xml.replace("<application", '<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <application', 1)
           service = """
                   <service
                       android:name=".ZingOverlayService"
@@ -88,7 +88,7 @@ jobs:
                   </service>
           """
           if ".ZingPageReaderService" not in xml:
-              xml = xml.replace("</application>", service + "\\n    </application>")
+              xml = xml.replace("</application>", service + "\n    </application>")
           manifest.write_text(xml)
           res = Path("android/app/src/main/res/xml")
           res.mkdir(parents=True, exist_ok=True)
@@ -104,7 +104,7 @@ jobs:
           values = Path("android/app/src/main/res/values/strings.xml")
           text = values.read_text()
           if "zing_page_reader_description" not in text:
-              text = text.replace("</resources>", '    <string name="zing_page_reader_description">Reads visible text on supported browser pages only after you turn on automatic page reading in Zing Zone.</string>\\n</resources>')
+              text = text.replace("</resources>", '    <string name="zing_page_reader_description">Reads visible text on supported browser pages only after you turn on automatic page reading in Zing Zone.</string>\n</resources>')
           values.write_text(text)
           kt = Path("android/app/src/main/kotlin/com/gyarasigujjar57/zingzone")
           kt.mkdir(parents=True, exist_ok=True)
@@ -315,10 +315,11 @@ jobs:
                       for (i in 0 until node.childCount) walk(node.getChild(i), depth + 1)
                   }
                   walk(root, 0)
-                  val content = text.toString().replace(Regex("\\n{3,}"), "\\n\\n").take(18000)
+                  val content = text.toString().replace(Regex("\n{3,}"), "\n\n").take(18000)
                   if (pageUrl.isBlank() || content.length < 120) return
                   val host = try { URL(pageUrl).host.lowercase() } catch (_: Exception) { return }
-                  if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return\n                  if (pageUrl.contains("/login", true) || pageUrl.contains("/profile", true) || pageUrl.contains("/dashboard", true) || pageUrl.contains("/payment", true) || pageUrl.contains("/signin", true)) return
+                  if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return\n                  
+                  if (pageUrl.contains("/login", true) || pageUrl.contains("/profile", true) || pageUrl.contains("/dashboard", true) || pageUrl.contains("/payment", true) || pageUrl.contains("/signin", true)) return
                   val lower = content.lowercase()
                   if (lower.contains("enter otp") || lower.contains("one time password") || lower.contains("captcha code") || lower.contains("upi pin") || lower.contains("card number") || lower.contains("payment gateway")) return
                   val hash = MessageDigest.getInstance("SHA-256").digest((pageUrl + content).toByteArray()).joinToString("") { "%02x".format(it) }

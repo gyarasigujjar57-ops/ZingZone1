@@ -7,6 +7,7 @@ on:
       - feature/live-form-chat-panel
     paths:
       - ".github/workflows/live-ai-worker-test.yml"
+      - "worker/src/index.js"
 
 jobs:
   test-worker:
@@ -122,6 +123,37 @@ jobs:
             exit 1
           fi
           echo "PASS: Gemini read the actual text contained in the uploaded image."
+      - name: Verify deterministic form field comparison and official-site guard
+        run: |
+          set -euo pipefail
+          base="https://zing-zone-ai.gyarasigujjar57.workers.dev"
+          curl --silent --show-error --fail --max-time 20 -o verify-match.json \
+            -H "Content-Type: application/json" \
+            --data '{"messages":[{"role":"user","text":"Run the supplied deterministic form verification."}],"formVerification":{"fields":[{"label":"Full name","sourceValue":"TEST PERSON","actualValue":"TEST PERSON"},{"label":"State","sourceValue":"Rajasthan","actualValue":"Rajasthan"}]}}' "$base"
+          python3 - <<'PY'
+          import json
+          data=json.load(open("verify-match.json"))
+          assert data.get("passed") is True, data
+          assert all(x.get("status") == "MATCH" for x in data["checks"]), data
+          print("PASS: exact source values match.")
+          PY
+          code=$(curl --silent --show-error --max-time 20 -o verify-mismatch.json -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            --data '{"messages":[{"role":"user","text":"Run the supplied deterministic form verification."}],"formVerification":{"fields":[{"label":"Date of birth","sourceValue":"2001-01-01","actualValue":"2001-10-01"}]}}' "$base")
+          test "$code" = "200"
+          python3 - <<'PY'
+          import json
+          data=json.load(open("verify-mismatch.json"))
+          assert data.get("passed") is False, data
+          assert data.get("requires_review") is True, data
+          assert data["checks"][0]["status"] == "MISMATCH", data
+          print("PASS: mismatched values are blocked for review.")
+          PY
+          code=$(curl --silent --show-error --max-time 20 -o nonofficial-page.json -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            --data '{"messages":[{"role":"user","text":"Explain page"}],"page":{"url":"https://example.com","title":"test","text":"A page with enough text for testing the guard.","fields":[]}}' "$base")
+          test "$code" = "403"
+          echo "PASS: non-official domains are rejected by page analysis."
       - name: Verify AI form draft values through Worker
         run: |
           set -euo pipefail

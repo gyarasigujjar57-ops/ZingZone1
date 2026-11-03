@@ -154,6 +154,26 @@ jobs:
             --data '{"messages":[{"role":"user","text":"Explain page"}],"page":{"url":"https://example.com","title":"test","text":"A page with enough text for testing the guard.","fields":[]}}' "$base")
           test "$code" = "403"
           echo "PASS: non-official domains are rejected by page analysis."
+      - name: Verify automatic official-page analysis through Worker
+        run: |
+          set -euo pipefail
+          base="https://zing-zone-ai.gyarasigujjar57.workers.dev"
+          code=$(curl --silent --show-error --max-time 45 -o page-response.json -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            --data '{"messages":[{"role":"user","text":"Explain this official form page in simple Hindi. Identify the required fields and do not invent values."}],"page":{"url":"https://sample.gov.in/application","title":"Citizen Application","text":"Citizen Application Form. Instructions: Enter your full name as printed on your certificate. Date of birth must match the school certificate. Select your state from the list. Required fields are marked with an asterisk. Test marker: ZING_PAGE_READ_OK.","fields":[{"label":"Full name","name":"full_name","type":"text","required":true},{"label":"Date of birth","name":"dob","type":"date","required":true},{"label":"State","name":"state","type":"select","required":true,"options":["Rajasthan","Haryana"]}]}}' "$base")
+          echo "HTTP status: $code"
+          if [ "$code" != "200" ]; then
+            jq '{error, upstream_status, diagnostic}' page-response.json 2>/dev/null || cat page-response.json
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          data=json.load(open("page-response.json"))
+          answer=data.get("answer","").strip()
+          assert answer, data
+          print("PASS: official-page context reached Gemini and produced an analysis.")
+          print(answer[:1200])
+          PY
       - name: Verify AI form draft values through Worker
         run: |
           set -euo pipefail

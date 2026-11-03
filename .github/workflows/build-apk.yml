@@ -2,7 +2,7 @@ name: Flutter APK Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/live-form-chat-panel]
   workflow_dispatch:
 
 permissions:
@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Test Worker form confidence engine
+        run: node --experimental-default-type=module --test worker/tests/*.test.js
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -39,9 +41,407 @@ jobs:
           a = app.read_text()
           if 'id("com.google.gms.google-services")' not in a:
               a = a.replace('plugins {', 'plugins {\n    id("com.google.gms.google-services")', 1)
+          a = re.sub(r'namespace\s*=\s*"[^"]+"', 'namespace = "com.gyarasigujjar57.zingzone"', a, count=1)
+          if "namespace =" not in a:
+              a = a.replace("android {", 'android {\n    namespace = "com.gyarasigujjar57.zingzone"', 1)
           a = re.sub(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "com.gyarasigujjar57.zingzone"', a, count=1)
+          # Disable release shrinking until optional OCR runtime classes are verified.
+          if "getByName(\"release\") { isMinifyEnabled = false" not in a:
+              a += '\nandroid { buildTypes { getByName("release") { isMinifyEnabled = false; isShrinkResources = false } } }\n'
           app.write_text(a)
           PY
+      - name: Configure Devanagari OCR and image cropper Android components
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle = Path("android/app/build.gradle.kts")
+          text = gradle.read_text()
+          dependencies = [
+              '    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")',
+              '    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")',
+              '    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")',
+              '    implementation("com.google.mlkit:text-recognition-korean:16.0.1")',
+          ]
+          for dependency in dependencies:
+              if dependency.strip() not in text:
+                  text = text.replace("dependencies {", "dependencies {\n" + dependency, 1)
+          gradle.write_text(text)
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          xml = manifest.read_text()
+          manifest.write_text(xml)
+          # Define the theme referenced by the image_cropper Android activity.
+          values = Path("android/app/src/main/res/values")
+          values.mkdir(parents=True, exist_ok=True)
+          (values / "styles.xml").write_text('''<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:windowNoTitle">true</item>
+              </style>
+          </resources>
+          ''')
+          PY
+
+      - name: Add floating assistant overlay and opt-in browser page reader
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          xml = manifest.read_text()
+          if "android.permission.SYSTEM_ALERT_WINDOW" not in xml:
+              xml = xml.replace("<application", '<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />\n    <application', 1)
+          service = """
+                  <service
+                      android:name=".ZingOverlayService"
+                      android:exported="false"
+                      android:foregroundServiceType="specialUse">
+                      <property
+                          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                          android:value="User-started draggable floating assistant overlay" />
+                  </service>
+                  <service
+                      android:name=".ZingPageReaderService"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/zing_accessibility_config" />
+                  </service>
+          """
+          if ".ZingPageReaderService" not in xml:
+              xml = xml.replace("</application>", service + "\n    </application>")
+          manifest.write_text(xml)
+          res = Path("android/app/src/main/res/xml")
+          res.mkdir(parents=True, exist_ok=True)
+          (res / "zing_accessibility_config.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:notificationTimeout="900"
+              android:canRetrieveWindowContent="true"
+              android:description="@string/zing_page_reader_description"
+              android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows" />
+          """)
+          values = Path("android/app/src/main/res/values/strings.xml")
+          values.parent.mkdir(parents=True, exist_ok=True)
+          text = values.read_text() if values.exists() else '<?xml version="1.0" encoding="utf-8"?>' + chr(10) + '<resources></resources>' + chr(10)
+          if "zing_page_reader_description" not in text:
+              text = text.replace("</resources>", '    <string name="zing_page_reader_description">Reads visible text on supported browser pages only after you turn on automatic page reading in Zing Zone.</string>\n</resources>')
+          values.write_text(text)
+          styles = Path("android/app/src/main/res/values/styles.xml")
+          styles.parent.mkdir(parents=True, exist_ok=True)
+          styles.write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar" />
+          </resources>
+          """)
+          styles_v35 = Path("android/app/src/main/res/values-v35/styles.xml")
+          styles_v35.parent.mkdir(parents=True, exist_ok=True)
+          styles_v35.write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+              </style>
+          </resources>
+          """)
+          kt = Path("android/app/src/main/kotlin/com/gyarasigujjar57/zingzone")
+          kt.mkdir(parents=True, exist_ok=True)
+          (kt / "MainActivity.kt").write_text(r'''package com.gyarasigujjar57.zingzone
+
+          import android.content.Intent
+          import android.net.Uri
+          import android.os.Build
+          import android.provider.Settings
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity : FlutterActivity() {
+              private val channel = "zingzone/native"
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channel).setMethodCallHandler { call, result ->
+                      when (call.method) {
+                          "requestOverlayPermission" -> {
+                              if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) result.success(true)
+                              else {
+                                  startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                                  result.success(false)
+                              }
+                          }
+                          "startOverlay" -> {
+                              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) result.error("NO_OVERLAY_PERMISSION", "Overlay permission is not enabled", null)
+                              else {
+                                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(Intent(this, ZingOverlayService::class.java))
+                                  else startService(Intent(this, ZingOverlayService::class.java))
+                                  result.success(true)
+                              }
+                          }
+                          "stopOverlay" -> { stopService(Intent(this, ZingOverlayService::class.java)); result.success(true) }
+                          "enableAutoRead" -> {
+                              getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).edit().putBoolean("flutter.zing_auto_page_read", call.argument<Boolean>("enabled") ?: false).apply()
+                              startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                              result.success(true)
+                          }
+                          "openAccessibilitySettings" -> { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); result.success(true) }
+                          else -> result.notImplemented()
+                      }
+                  }
+              }
+          }
+          '''.replace("          ", ""))
+          (kt / "ZingOverlayService.kt").write_text(r'''package com.gyarasigujjar57.zingzone
+
+          import android.app.Service
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.content.Intent
+          import android.graphics.Color
+          import android.graphics.PixelFormat
+          import android.os.Build
+          import android.os.Handler
+          import android.os.IBinder
+          import android.os.Looper
+          import android.view.Gravity
+          import android.view.MotionEvent
+          import android.view.View
+          import android.view.WindowManager
+          import android.widget.LinearLayout
+          import android.widget.TextView
+
+          class ZingOverlayService : Service() {
+              private lateinit var wm: WindowManager
+              private lateinit var root: LinearLayout
+              private lateinit var params: WindowManager.LayoutParams
+              private lateinit var bubble: TextView
+              private lateinit var panel: LinearLayout
+              private lateinit var answer: TextView
+              private var expanded = false
+              private var panelWidth = 300
+              private var panelHeight = 280
+              private val handler = Handler(Looper.getMainLooper())
+              private val refresh = object : Runnable {
+                  override fun run() {
+                      if (::answer.isInitialized) {
+                          val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                          val value = prefs.getString("flutter.zing_latest_page_answer", null)
+                          if (!value.isNullOrBlank()) answer.text = value.take(1800)
+                      }
+                      handler.postDelayed(this, 1800)
+                  }
+              }
+              override fun onBind(intent: Intent?): IBinder? = null
+              override fun onCreate() {
+                  super.onCreate()
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      val channel = NotificationChannel("zing_overlay", "Zing Zone floating assistant", NotificationManager.IMPORTANCE_LOW)
+                      (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
+                  }
+                  val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      Notification.Builder(this, "zing_overlay")
+                          .setSmallIcon(android.R.drawable.ic_dialog_info)
+                          .setContentTitle("Zing Zone assistant is active")
+                          .setContentText("Your floating assistant is running. Tap Stop in Zing Zone to close it.")
+                          .setOngoing(true)
+                          .build()
+                  } else {
+                      @Suppress("DEPRECATION")
+                      Notification.Builder(this)
+                          .setSmallIcon(android.R.drawable.ic_dialog_info)
+                          .setContentTitle("Zing Zone assistant is active")
+                          .setContentText("Your floating assistant is running.")
+                          .setOngoing(true)
+                          .build()
+                  }
+                  startForeground(1001, notification)
+                  wm = getSystemService(WINDOW_SERVICE) as WindowManager
+                  val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE
+                  params = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, type, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT)
+                  params.gravity = Gravity.TOP or Gravity.START
+                  params.x = 24; params.y = 220
+                  bubble = TextView(this).apply {
+                      text = "Z"
+                      textSize = 20f
+                      setTextColor(Color.WHITE)
+                      gravity = Gravity.CENTER
+                      setBackgroundColor(Color.rgb(65, 94, 238))
+                      elevation = 12f
+                  }
+                  bubble.background = android.graphics.drawable.GradientDrawable().apply {
+                      shape = android.graphics.drawable.GradientDrawable.OVAL
+                      setColor(Color.rgb(65, 94, 238))
+                      setStroke(3, Color.WHITE)
+                  }
+                  bubble.layoutParams = LinearLayout.LayoutParams(dp(58), dp(58))
+                  panel = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(dp(14), dp(10), dp(14), dp(12))
+                      setBackgroundColor(Color.WHITE)
+                      elevation = 18f
+                  }
+                  val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                  val title = TextView(this).apply { text = "ZING AI  ·  LIVE PAGE"; textSize = 13f; setTextColor(Color.rgb(24, 34, 65)); setTypeface(null, 1) }
+                  title.setOnTouchListener(DragTouch(false))
+                  val smaller = TextView(this).apply { text = "−"; textSize = 20f; setTextColor(Color.DKGRAY); setPadding(dp(6), 0, dp(6), 0); setOnClickListener { resizePanel(-1) } }
+                  val larger = TextView(this).apply { text = "+"; textSize = 20f; setTextColor(Color.DKGRAY); setPadding(dp(6), 0, dp(6), 0); setOnClickListener { resizePanel(1) } }
+                  val minimize = TextView(this).apply { text = " — "; textSize = 22f; setTextColor(Color.DKGRAY); setOnClickListener { toggle() } }
+                  header.addView(title, LinearLayout.LayoutParams(0, dp(42), 1f)); header.addView(smaller); header.addView(larger); header.addView(minimize)
+                  answer = TextView(this).apply { text = "सरकारी वेबसाइट खोलें। अनुमति मिलने पर AI पेज पढ़कर यहाँ समझाएगा।"; textSize = 13f; setTextColor(Color.rgb(35, 43, 66)); setPadding(0, dp(8), 0, dp(8)) }
+                  panel.addView(header); panel.addView(answer)
+                  root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(bubble) }
+                  bubble.setOnTouchListener(DragTouch(true))
+                  wm.addView(root, params)
+                  handler.post(refresh)
+              }
+              private fun toggle() {
+                  expanded = !expanded
+                  root.removeAllViews()
+                  if (expanded) {
+                      root.addView(panel, LinearLayout.LayoutParams(dp(panelWidth), dp(panelHeight)))
+                  } else root.addView(bubble)
+                  try { wm.updateViewLayout(root, params) } catch (_: Exception) {}
+              }
+              private fun resizePanel(delta: Int) {
+                  panelWidth = (panelWidth + delta * 40).coerceIn(240, 380)
+                  panelHeight = (panelHeight + delta * 40).coerceIn(220, 520)
+                  if (expanded) {
+                      panel.layoutParams = LinearLayout.LayoutParams(dp(panelWidth), dp(panelHeight))
+                      try { wm.updateViewLayout(root, params) } catch (_: Exception) {}
+                  }
+              }
+              private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+              private inner class DragTouch(private val toggleOnTap: Boolean) : View.OnTouchListener {
+                  var sx = 0f; var sy = 0f; var wx = 0; var wy = 0; var moved = false
+                  override fun onTouch(v: View, e: MotionEvent): Boolean {
+                      when (e.action) {
+                          MotionEvent.ACTION_DOWN -> { sx=e.rawX; sy=e.rawY; wx=params.x; wy=params.y; moved=false; return true }
+                          MotionEvent.ACTION_MOVE -> {
+                              val dx=(e.rawX-sx).toInt(); val dy=(e.rawY-sy).toInt()
+                              if (kotlin.math.abs(dx)+kotlin.math.abs(dy)>8) moved=true
+                              params.x=wx+dx; params.y=wy+dy
+                              try { wm.updateViewLayout(root, params) } catch (_: Exception) {}
+                              return true
+                          }
+                          MotionEvent.ACTION_UP -> { if (!moved && toggleOnTap) toggle(); return true }
+                      }
+                      return false
+                  }
+              }
+              override fun onDestroy() { handler.removeCallbacks(refresh); if (::root.isInitialized) try { wm.removeView(root) } catch (_: Exception) {}; super.onDestroy() }
+          }
+          '''.replace("          ", ""))
+          (kt / "ZingPageReaderService.kt").write_text(r'''package com.gyarasigujjar57.zingzone
+
+          import android.accessibilityservice.AccessibilityService
+          import android.accessibilityservice.AccessibilityServiceInfo
+          import android.view.accessibility.AccessibilityEvent
+          import android.view.accessibility.AccessibilityNodeInfo
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.security.MessageDigest
+          import java.util.concurrent.Executors
+
+          class ZingPageReaderService : AccessibilityService() {
+              private val worker = Executors.newSingleThreadExecutor()
+              private var lastHash = ""
+              private var lastSentAt = 0L
+              private val browsers = setOf("com.android.chrome", "com.microsoft.emmx", "org.mozilla.firefox", "com.sec.android.app.sbrowser", "com.gyarasigujjar57.zingzone")
+              override fun onServiceConnected() {
+                  serviceInfo = serviceInfo.apply {
+                      eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED
+                      feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+                      flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                      notificationTimeout = 900
+                  }
+              }
+              override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+                  if (event == null || event.packageName?.toString() !in browsers) return
+                  val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                  if (!prefs.getBoolean("flutter.zing_auto_page_read", false)) return
+                  val root = rootInActiveWindow ?: return
+                  val isOwnApp = event.packageName?.toString() == "com.gyarasigujjar57.zingzone"
+                  val savedDomText = if (isOwnApp) prefs.getString("flutter.zing_live_page_text", "") ?: "" else ""
+                  val savedDomFields = if (isOwnApp) prefs.getString("flutter.zing_live_page_fields", "") ?: "" else ""
+                  val text = StringBuilder()
+                  val fields = JSONArray()
+                  var pageUrl = prefs.getString("flutter.zing_live_current_url", "") ?: ""
+                  fun walk(node: AccessibilityNodeInfo?, depth: Int) {
+                      if (node == null || depth > 24 || text.length > 18000) return
+                      val cls = node.className?.toString() ?: ""
+                      val id = node.viewIdResourceName ?: ""
+                      val hint = if (android.os.Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
+                      if (id.contains("url_bar") || id.contains("url_view") || id.contains("location_bar") || id.contains("address_bar")) {
+                          val candidate = node.text?.toString().orEmpty()
+                          if (candidate.contains("gov.in") || candidate.contains("nic.in")) pageUrl = if (candidate.startsWith("http")) candidate else "https://" + candidate
+                      }
+                      if (cls.contains("EditText")) {
+                          val field = JSONObject().put("label", (hint.ifBlank { node.contentDescription?.toString().orEmpty() }).take(180))
+                              .put("type", cls.substringAfterLast('.')).put("required", false)
+                          fields.put(field)
+                      } else {
+                          val value = node.text?.toString()?.trim().orEmpty()
+                          if (value.length > 1) text.append(value).append('\n')
+                          val desc = node.contentDescription?.toString()?.trim().orEmpty()
+                          if (desc.length > 2 && desc != value) text.append(desc).append('\n')
+                      }
+                      for (i in 0 until node.childCount) walk(node.getChild(i), depth + 1)
+                  }
+                  if (savedDomText.isNotBlank()) {
+                      try {
+                          val saved = JSONArray(savedDomFields)
+                          for (i in 0 until saved.length()) fields.put(saved.getJSONObject(i))
+                      } catch (_: Exception) {}
+                  } else {
+                      walk(root, 0)
+                  }
+                  val rawContent = if (savedDomText.isNotBlank()) savedDomText else text.toString()
+                  val content = rawContent.replace(Regex("\n{3,}"), "\n\n").take(18000)
+                  if (pageUrl.isBlank() || content.length < 120) return
+                  val host = try { URL(pageUrl).host.lowercase() } catch (_: Exception) { return }
+                  if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return
+                  
+                  
+                  if (pageUrl.contains("/login", true) || pageUrl.contains("/profile", true) || pageUrl.contains("/dashboard", true) || pageUrl.contains("/payment", true) || pageUrl.contains("/signin", true)) return
+                  val lower = content.lowercase()
+                  val firebaseToken = prefs.getString("flutter.zing_firebase_id_token", null)
+                  if (firebaseToken.isNullOrBlank()) return
+                  if (lower.contains("enter otp") || lower.contains("one time password") || lower.contains("captcha code") || lower.contains("upi pin") || lower.contains("card number") || lower.contains("payment gateway")) return
+                  val hash = MessageDigest.getInstance("SHA-256").digest((pageUrl + content).toByteArray()).joinToString("") { "%02x".format(it) }
+                  val now = System.currentTimeMillis()
+                  if (hash == lastHash || now - lastSentAt < 7000) return
+                  lastHash = hash; lastSentAt = now
+                  val payload = JSONObject()
+                      .put("messages", JSONArray().put(JSONObject().put("role", "user").put("text", "इस सरकारी वेब पेज को हिंदी में समझाओ। पूरा उपलब्ध पेज पढ़ो; निर्देश, सेक्शन और फ़ील्ड बताओ। अनुमान मत लगाओ।")))
+                      .put("page", JSONObject().put("url", pageUrl).put("title", host).put("text", content).put("fields", fields))
+                  worker.execute {
+                      try {
+                          val conn = (URL("https://zing-zone-ai.gyarasigujjar57.workers.dev").openConnection() as HttpURLConnection)
+                          conn.requestMethod = "POST"; conn.connectTimeout = 15000; conn.readTimeout = 35000
+                          conn.setRequestProperty("Content-Type", "application/json")
+                          conn.setRequestProperty("Authorization", "Bearer " + firebaseToken)
+                          conn.doOutput = true
+                          conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                          val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+                          val response = stream.bufferedReader().use { it.readText() }
+                          val answer = JSONObject(response).optString("answer", "पेज का विश्लेषण नहीं हो सका।")
+                          getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).edit().putString("flutter.zing_latest_page_answer", answer.take(5000)).apply()
+                          conn.disconnect()
+                      } catch (_: Exception) {
+                          getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).edit().putString("flutter.zing_latest_page_answer", "AI से पेज पढ़ने में कनेक्शन समस्या आई।").apply()
+                      }
+                  }
+              }
+              override fun onInterrupt() {}
+          }
+          '''.replace("          ", ""))
+          PY
+
       - name: Get dependencies
         run: flutter pub get
       - name: Analyze
@@ -60,11 +460,6 @@ jobs:
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
-      - name: Print Android signing fingerprints for Firebase setup
-        continue-on-error: true
-        run: |
-          cd android
-          ./gradlew signingReport
       - name: Build release APK
         run: |
           for attempt in 1 2 3; do
@@ -81,3 +476,9 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+# Re-trigger APK build after live AI chat fixes.
+
+# Rebuild after live form validation and offline demo form updates.
+
+# Rebuild with the latest OCR, crop, and preliminary eligibility implementation.

@@ -1,23 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:google_mlkit_selfie_segmentation/google_mlkit_selfie_segmentation.dart';
+import 'package:image/image.dart' as img;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 
+const nativeZing = MethodChannel('zingzone/native');
 const navy=Color(0xFF11152B), blue=Color(0xFF4965F5), violet=Color(0xFF7856D9), pink=Color(0xFFEF4F83), muted=Color(0xFF747B8F), line=Color(0xFFE8EAF1), pale=Color(0xFFF6F7FB);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: firebaseOptions);
   runApp(const ZingZone());
+}
+Future<String> _zingFirebaseBearer() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) throw Exception('पहले Zing Zone में साइन इन करें।');
+  final token = await user.getIdToken();
+  if (token == null || token.isEmpty) throw Exception('Firebase token नहीं मिला।');
+  return 'Bearer $token';
 }
 void note(BuildContext c,String s)=>ScaffoldMessenger.of(c).showSnackBar(SnackBar(content:Text(s),behavior:SnackBarBehavior.floating));
 void page(BuildContext c,Widget w)=>Navigator.push(c,MaterialPageRoute(builder:(_)=>w));
@@ -66,8 +80,48 @@ class ZingZone extends StatelessWidget {
         labelTextStyle: WidgetStatePropertyAll(TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
       ),
     ),
-    home: const Welcome(),
+    home: const AuthGate(),
   );
+}
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: CircularProgressIndicator(color: blue)),
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, color: muted, size: 42),
+                    const SizedBox(height: 12),
+                    const Text('Account service is unavailable. Please check your internet and try again.',
+                      textAlign: TextAlign.center, style: TextStyle(color: navy)),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: () => FirebaseAuth.instance.signOut(),
+                      child: const Text('Back to sign in')),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return snapshot.data == null ? const Welcome() : const Shell();
+      },
+    );
+  }
 }
 class Welcome extends StatelessWidget {
   const Welcome({super.key});
@@ -210,11 +264,7 @@ class Welcome extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 7),
-                          TextButton(
-                            onPressed: () => Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const Shell()), (r) => false),
-                            child: const Text('Explore app as guest', style: TextStyle(fontWeight: FontWeight.w700)),
-                          ),
+
                         ],
                       ),
                     ),
@@ -244,7 +294,97 @@ class _PhoneOtpState extends State<PhoneOtp>{final code=TextEditingController();
 class Shell extends StatefulWidget{const Shell({super.key});@override State<Shell> createState()=>_ShellState();}
 class _ShellState extends State<Shell>{int tab=0;@override Widget build(BuildContext c)=>Scaffold(body:IndexedStack(index:tab,children:const[ChatPage(),StorePage(),RewardsPage(),ProfilePage()]),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.chat_bubble_outline),selectedIcon:Icon(Icons.chat_bubble),label:'AI Chat'),NavigationDestination(icon:Icon(Icons.shopping_bag_outlined),selectedIcon:Icon(Icons.shopping_bag),label:'Store'),NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),selectedIcon:Icon(Icons.card_giftcard),label:'Rewards'),NavigationDestination(icon:Icon(Icons.person_outline),selectedIcon:Icon(Icons.person),label:'Profile')]));}
 class ChatPage extends StatefulWidget{const ChatPage({super.key});@override State<ChatPage> createState()=>_ChatPageState();}
-class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;bool sending=false;@override void initState(){super.initState();_restoreConversation();}Future<void> _restoreConversation() async {final saved=await ChatMemory.loadCurrent();if(!mounted||saved.isEmpty)return;try{final decoded=jsonDecode(saved) as List<dynamic>;setState((){msgs..clear()..addAll(decoded.map((x)=>(x as List<dynamic>).map((v)=>v.toString()).toList()));});}catch(_){}}Future<void> _persistConversation() async {await ChatMemory.saveCurrent(jsonEncode(msgs));}@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if((s.isEmpty&&attachedImage==null)||sending)return;final imageBytes=attachedImage;final userText=s.isEmpty?'इस तस्वीर/दस्तावेज़ को पढ़ो और समझाओ।':s;setState(() { msgs.add(['user',userText]); sending=true; attachedImage=null; attachedImageName=null; });input.clear();await _persistConversation();try{final recent=msgs.take(20).toList();String? answer;final prefs=await SharedPreferences.getInstance();final workerUrl=(prefs.getString('zing_ai_worker_url')??'').trim();if(workerUrl.isNotEmpty&&imageBytes==null){final uri=Uri.tryParse(workerUrl);if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('worker-url-invalid');final client=io.HttpClient()..connectionTimeout=const Duration(seconds:25);try{final req=await client.postUrl(uri);req.headers.contentType=io.ContentType.json;req.write(jsonEncode({'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList()}));final res=await req.close().timeout(const Duration(seconds:40));final body=await res.transform(utf8.decoder).join();if(res.statusCode<200||res.statusCode>=300)throw Exception('worker-http-${res.statusCode}');final decoded=jsonDecode(body);answer=(decoded is Map?decoded['answer']:null)?.toString().trim();}finally{client.close(force:true);}}else{final contents=recent.asMap().entries.map((entry){final i=entry.key;final m=entry.value;if(i==recent.length-1&&imageBytes!=null){return Content.multi([TextPart(m[1]),InlineDataPart('image/jpeg',imageBytes)]);}return m[0]=='user'?Content.text(m[1]):Content.model([TextPart(m[1])]);}).toList();final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are Zing AI inside Zing Zone, an Indian citizen-services assistant. Reply in the user\'s language, especially Hindi/Hinglish. Help users prepare and understand government/recruitment/scholarship/pension/vehicle/certificate forms. First identify the exact form, state, official department and deadline; if uncertain, ask instead of guessing. Explain eligibility, document checklist, field-by-field meanings, common mistakes, and a final review checklist. When official URLs are known, direct the user to the official portal and clearly distinguish official government sites from third parties. Never claim you have accessed a portal, filled fields, uploaded documents, paid a fee, or submitted a form unless a verified integration actually confirms it. Never ask for passwords, OTPs, full card/bank credentials, or unnecessary sensitive identity data in chat. Tell users to enter sensitive details only on the official portal. Do not invent rules, dates, fees, eligibility or required documents; flag uncertainty and advise official verification. Keep steps practical for a phone user and ask one clear question at a time.'));final response=await model.generateContent(contents);answer=response.text?.trim();}if(answer==null||answer.isEmpty)throw Exception('empty-answer');if(mounted){setState(()=>msgs.add(['ai',answer!]));await _persistConversation();}}on FirebaseException catch(e){final message='AI request failed (${e.code}). Firebase AI Logic setup, App Check, model availability aur internet check karna hoga.';if(mounted){setState(()=>msgs.add(['ai',message]));await _persistConversation();}}catch(e){final prefs=await SharedPreferences.getInstance();final configured=(prefs.getString('zing_ai_worker_url')??'').trim().isNotEmpty;final message=configured?'Zing AI server se connection nahi hua. Worker URL/deployment aur internet check karo.':'AI request failed. Settings → Zing AI server mein free Cloudflare Worker ka deployed HTTPS URL save karo; photo/document ke liye Firebase AI Logic setup bhi chahiye.';if(mounted){setState(()=>msgs.add(['ai',message]));await _persistConversation();}}finally{if(mounted)setState(()=>sending=false);}}Future<void> attachImage() async {try{final file=await picker.pickImage(source:ImageSource.gallery,maxWidth:1600,maxHeight:1600,imageQuality:75);if(file==null||!mounted)return;final bytes=await file.readAsBytes();setState(() { attachedImage=bytes; attachedImageName=file.name; });}catch(_){if(mounted)note(context,'Image select nahi hui. Photo permission aur storage check karo.');}}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:()async{Navigator.pop(c);if(msgs.isNotEmpty)await ChatMemory.saveHistory(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)setState(()=>msgs.clear());await ChatMemory.saveCurrent('[]');}),
+class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;String? attachedImageMimeType;bool sending=false;@override void initState(){super.initState();_restoreConversation();}Future<void> _restoreConversation() async {final saved=await ChatMemory.loadCurrent();if(!mounted||saved.isEmpty)return;try{final decoded=jsonDecode(saved) as List<dynamic>;setState((){msgs..clear()..addAll(decoded.map((x)=>(x as List<dynamic>).map((v)=>v.toString()).toList()));});}catch(_){}}Future<void> _persistConversation() async {await ChatMemory.saveCurrent(jsonEncode(msgs));}@override void dispose(){input.dispose();super.dispose();}bool _looksLikeFormRequest(String text){final q=text.toLowerCase();return RegExp(r'(form|bharna|bharo|fill|apply|application|recruitment|army|आवेदन|फॉर्म|भरना|भरो|भर्ती|मैजिक फिल)').hasMatch(q);}Future<void> _openLiveFormPanel() async {await showModalBottomSheet<void>(context:context,isScrollControlled:true,useSafeArea:true,enableDrag:true,showDragHandle:true,backgroundColor:Colors.white,builder:(ctx)=>SizedBox(height:MediaQuery.of(ctx).size.height*.86,child:const LiveFormPanel()));}Future<void> send([String? preset]) async {
+  final s=(preset??input.text).trim();
+  if((s.isEmpty&&attachedImage==null)||sending)return;
+  final imageBytes=attachedImage;
+  final userText=s.isEmpty?'इस तस्वीर/दस्तावेज़ को पढ़ो और समझाओ।':s;
+  if(_looksLikeFormRequest(userText)){WidgetsBinding.instance.addPostFrameCallback((_) { if(mounted) _openLiveFormPanel(); });}
+  setState(() { msgs.add(['user',userText]); sending=true; attachedImage=null; attachedImageName=null; });
+  input.clear();
+  await _persistConversation();
+  String? workerFailure;
+  try {
+    // Always send the newest messages so the latest user prompt is never dropped.
+    final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();
+    // Gemini conversation history must begin with a user turn. When the 20-message
+    // window starts on an old assistant reply, drop that orphaned reply only.
+    if(recent.isNotEmpty && recent.first[0]!='user') recent.removeAt(0);
+    String? answer;
+    final prefs=await SharedPreferences.getInstance();
+    final workerUrl=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+    // Try Cloudflare first, but never let its failure block Firebase fallbacks.
+    if(workerUrl.isNotEmpty) {
+      try {
+        final uri=Uri.tryParse(workerUrl);
+        if(uri==null || uri.scheme!='https' || uri.host.isEmpty) throw Exception('Invalid Worker HTTPS URL');
+        final client=io.HttpClient()..connectionTimeout=const Duration(seconds:15);
+        try {
+          final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
+          req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());
+          req.write(jsonEncode({
+            'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList(),
+            if(imageBytes!=null) 'image': {'mimeType':attachedImageMimeType??'image/jpeg','data':base64Encode(imageBytes)}
+          }));
+          final res=await req.close().timeout(const Duration(seconds:45));
+          final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
+          if(res.statusCode<200 || res.statusCode>=300) throw Exception('Worker HTTP '+res.statusCode.toString()+': '+body);
+          final decoded=jsonDecode(body);
+          answer=(decoded is Map ? decoded['answer'] : null)?.toString().trim();
+          if(answer==null || answer!.isEmpty) throw Exception('Worker returned no answer');
+        } finally { client.close(force:true); }
+      } catch (e) { workerFailure=e.toString(); answer=null; }
+    }
+    // Firebase callable is the first fallback (and primary route for images).
+    if(answer==null || answer!.isEmpty) {
+      if(imageBytes==null) {
+        try {
+          final callable=FirebaseFunctions.instanceFor(region:'asia-south1').httpsCallable('askZingAI',options:HttpsCallableOptions(timeout:const Duration(seconds:45)));
+          final result=await callable.call({'messages':recent.map((m)=>{'role':m[0]=='ai'?'model':'user','text':m[1]}).toList()});
+          final data=result.data;
+          if(data is Map) answer=(data['answer']??'').toString().trim();
+        } catch (_) { answer=null; }
+      }
+    }
+    // Firebase AI Logic is the final fallback and handles image questions too.
+    if(answer==null || answer!.isEmpty) {
+      final contents=recent.asMap().entries.map((entry) {
+        final i=entry.key; final m=entry.value;
+        if(i==recent.length-1 && imageBytes!=null) return Content.multi([TextPart(m[1]),InlineDataPart(attachedImageMimeType??'image/jpeg',imageBytes)]);
+        return m[0]=='user'?Content.text(m[1]):Content.model([TextPart(m[1])]);
+      }).toList();
+      final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are Zing AI, a helpful Indian personal assistant. Reply naturally in the user\'s language, especially Hindi/Hinglish. Answer general questions as well as Indian citizen-service questions. Be clear, practical and conversational. Never invent eligibility, fees, deadlines or official URLs. Never claim to have opened a website, filled fields, uploaded documents, paid or submitted anything unless a verified integration confirms it. Never ask for passwords, OTPs, CAPTCHA answers or full bank/card credentials. Ask one clear question at a time when essential details are missing.'));
+      final response=await model.generateContent(contents);
+      answer=response.text?.trim();
+    }
+    if(answer==null || answer!.isEmpty) throw Exception('No AI provider returned an answer');
+    if(mounted) { setState(()=>msgs.add(['ai',answer!])); await _persistConversation(); }
+  } on FirebaseException catch(e) {
+    final message='AI जवाब नहीं मिल पाया ('+e.code+'). इंटरनेट या AI सर्वर की उपलब्धता जाँचनी होगी।';
+    if(mounted) { setState(()=>msgs.add(['ai',message])); await _persistConversation(); }
+  } catch(e) {
+    final detail=(workerFailure??e.toString()).replaceAll(RegExp(r'\s+'),' ').trim();
+    final message='AI से जवाब नहीं मिला। कारण: '+(detail.isEmpty?'सर्वर से जवाब नहीं आया।':detail);
+    if(mounted) { setState(()=>msgs.add(['ai',message])); await _persistConversation(); }
+  } finally { if(mounted) setState(()=>sending=false); }
+}
+Future<void> attachImage() async {
+  try {
+    final picked=await picker.pickImage(source:ImageSource.gallery);
+    if(picked==null||!mounted)return;
+    final cropped=await ImageCropper().cropImage(
+      sourcePath:picked.path,
+      maxWidth:1600,
+      maxHeight:1600,
+      compressFormat:ImageCompressFormat.jpg,
+      compressQuality:85,
+      uiSettings:[AndroidUiSettings(toolbarTitle:'फोटो क्रॉप करें',toolbarColor:Colors.white,toolbarWidgetColor:navy,initAspectRatio:CropAspectRatioPreset.original,lockAspectRatio:false)],
+    );
+    if(cropped==null||!mounted)return;
+    final bytes=await cropped.readAsBytes();
+    setState(() { attachedImage=bytes; attachedImageName='cropped_document.jpg'; attachedImageMimeType='image/jpeg'; });
+  }catch(_){if(mounted)note(context,'फोटो क्रॉप नहीं हुई। दोबारा कोशिश करें।');}
+}Widget suggestion(String title,String subtitle,IconData icon,String promptText)=>Card(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(17),side:const BorderSide(color:line)),child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFEDF0FF),child:Icon(icon,color:blue)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.w800,color:navy)),subtitle:Text(subtitle,style:const TextStyle(fontSize:11,color:muted)),trailing:const Icon(Icons.arrow_forward_ios,size:14),onTap:()=>send(promptText)));@override Widget build(BuildContext c)=>Scaffold(backgroundColor:Colors.white,drawer:Drawer(child:SafeArea(child:Column(children:[const Padding(padding:EdgeInsets.all(18),child:Row(children:[Icon(Icons.all_inclusive,color:blue,size:30),SizedBox(width:10),Text('ZING ZONE',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1.5,color:navy,fontSize:17))])),const Divider(height:1),ListTile(leading:const Icon(Icons.add_comment_outlined,color:blue),title:const Text('New chat'),onTap:()async{Navigator.pop(c);if(msgs.isNotEmpty)await ChatMemory.saveHistory(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)setState(()=>msgs.clear());await ChatMemory.saveCurrent('[]');}),
 ListTile(leading:const Icon(Icons.save_outlined,color:blue),title:const Text('Save current draft'),onTap:()async{Navigator.pop(c);if(msgs.isEmpty){note(c,'Save karne ke liye pehle chat mein kuch likho.');return;}await ChatMemory.saveDraft(msgs.map((m)=>'${m[0]=='user'?'You':'Zing AI'}: ${m[1]}').join('\\n'));if(mounted)note(c,'Draft this device par save ho gaya.');}),ListTile(leading:const Icon(Icons.history,color:blue),title:const Text('Chat history'),onTap:(){Navigator.pop(c);page(c,const ChatHistory());}),ListTile(leading:const Icon(Icons.drafts_outlined,color:blue),title:const Text('Drafts'),onTap:(){Navigator.pop(c);page(c,const DraftsPage());}),const Divider(),ListTile(leading:const Icon(Icons.settings_outlined,color:blue),title:const Text('Settings'),onTap:(){Navigator.pop(c);page(c,const AppSettingsPage());}),const Spacer(),const Padding(padding:EdgeInsets.all(16),child:Text('Personal AI workspace • Zing Zone',style:TextStyle(fontSize:11,color:muted)))]))),body:SafeArea(child:Column(children:[Padding(padding:const EdgeInsets.fromLTRB(15,13,8,12),child:Row(children:[Builder(builder:(ctx)=>IconButton(tooltip:'Open chat drawer',onPressed:()=>Scaffold.of(ctx).openDrawer(),icon:const Icon(Icons.menu_rounded,color:navy,size:26))),Container(width:40,height:40,decoration:BoxDecoration(gradient:const LinearGradient(colors:[blue,violet]),borderRadius:BorderRadius.circular(14)),child:const Icon(Icons.auto_awesome,color:Colors.white)),const SizedBox(width:8),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Zing AI',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:navy)),Text('Your personal assistant',style:TextStyle(fontSize:11,color:muted))])),IconButton(tooltip:'Notifications',onPressed:()=>page(c,const NotificationsPage()),icon:const Icon(Icons.notifications_none,color:navy)),IconButton(tooltip:'Premium',onPressed:()=>page(c,const PremiumPage()),icon:const Icon(Icons.workspace_premium_outlined,color:violet)),TokenBalanceBadge(onTap:()=>page(c,const TokenPage())) ])),const Divider(height:1,color:line),Expanded(child:msgs.isEmpty
       ? Center(
           child: Padding(
@@ -271,6 +411,582 @@ ListTile(leading:const Icon(Icons.save_outlined,color:blue),title:const Text('Sa
           ),
         )
       : ListView(padding:const EdgeInsets.all(16),children:msgs.map((m){final user=m[0]=='user';return Align(alignment:user?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:330),margin:const EdgeInsets.only(bottom:12),padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:user?blue:const Color(0xFFF1F3F8),borderRadius:BorderRadius.only(topLeft:const Radius.circular(19),topRight:const Radius.circular(19),bottomLeft:Radius.circular(user?19:5),bottomRight:Radius.circular(user?5:19))),child:Text(m[1],style:TextStyle(color:user?Colors.white:navy,height:1.5,fontSize:14))));}).toList())),Container(padding:const EdgeInsets.fromLTRB(9,8,9,12),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:15,offset:Offset(0,-4))]),child:Column(children:[if(attachedImage!=null) Padding(padding:const EdgeInsets.only(bottom:8),child:Row(children:[const Icon(Icons.image_outlined,color:blue),Expanded(child:Text(attachedImageName??'Image attached',maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>setState(() { attachedImage=null; attachedImageName=null; }),icon:const Icon(Icons.close))])),Row(children:[IconButton(tooltip:'Attach image or form photo',onPressed:sending?null:attachImage,icon:const Icon(Icons.add_circle_outline)),Expanded(child:TextField(controller:input,minLines:1,maxLines:5,onSubmitted:(_)=>send(),decoration:InputDecoration(hintText:'Message Zing AI…',filled:true,fillColor:pale,border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none)))),Container(decoration:BoxDecoration(color:blue,borderRadius:BorderRadius.circular(15)),child:IconButton(onPressed:send,icon:const Icon(Icons.arrow_upward,color:Colors.white)))]),Text(sending?'Zing AI is thinking…':'AI availability depends on Firebase AI Logic setup and quota.',style:const TextStyle(fontSize:10,color:muted))]))])));}
+
+
+class LiveFormPanel extends StatefulWidget {
+  const LiveFormPanel({super.key});
+  @override State<LiveFormPanel> createState() => _LiveFormPanelState();
+}
+class _LiveFormPanelState extends State<LiveFormPanel> {
+  final urlController = TextEditingController();
+  late final WebViewController web;
+  bool loading=false, analyzing=false, readingDocument=false, removingBackground=false;
+  String pageText='', aiAnswer='', documentText='';
+  Uint8List? preparedPhotoBytes;
+  final ImagePicker documentPicker=ImagePicker();
+  List<Map<String,dynamic>> fields=[];
+  @override void initState() {
+    super.initState();
+    web=WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageStarted: (_) {
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.remove('zing_live_page_text');
+            prefs.remove('zing_live_page_fields');
+            prefs.remove('zing_live_current_url');
+          });
+          if(mounted) setState(() {loading=true;fields=[];pageText='';});
+        },
+        onPageFinished: (url) {
+          SharedPreferences.getInstance().then((prefs)=>prefs.setString('zing_live_current_url',url));
+          if(mounted) setState(() {loading=false;urlController.text=url;});
+          // Automatically inspect each loaded page; no separate "Read page" tap is needed.
+          Future.delayed(const Duration(milliseconds:900), () {
+            if(mounted) inspect();
+          });
+        },
+      ))
+      ..addJavaScriptChannel('ZingLiveForm',onMessageReceived:(message) {
+        try {
+          final d=jsonDecode(message.message);
+          if(d is Map && mounted) setState(() {
+            pageText=(d['text']??'').toString();
+            fields=(d['fields'] as List? ?? []).whereType<Map>().map((e)=>Map<String,dynamic>.from(e)).toList();
+            analyzing=false;
+          });
+          // Keep only page text and field metadata locally for the opt-in native reader.
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setString('zing_live_page_text', (d['text']??'').toString());
+            prefs.setString('zing_live_page_fields', jsonEncode(d['fields']??[]));
+          });
+        } catch (_) { if(mounted) setState(()=>analyzing=false); }
+      });
+  }
+  @override void dispose(){urlController.dispose();super.dispose();}
+  Future<void> readDocument() async {
+    if (readingDocument) return;
+    try {
+      final picked = await documentPicker.pickMultiImage();
+      if (picked.isEmpty || !mounted) return;
+      final selected = picked.take(5).toList();
+      setState(() => readingDocument = true);
+      final latin = TextRecognizer(script: TextRecognitionScript.latin);
+      final devanagari = TextRecognizer(script: TextRecognitionScript.devanagiri);
+      final results = <String>[];
+      try {
+        for (var i = 0; i < selected.length; i++) {
+          if (!mounted) return;
+          final cropped = await ImageCropper().cropImage(
+            sourcePath: selected[i].path,
+            maxWidth: 1800,
+            maxHeight: 2400,
+            compressFormat: ImageCompressFormat.jpg,
+            compressQuality: 90,
+            uiSettings: [AndroidUiSettings(
+              toolbarTitle: 'दस्तावेज़ ${i + 1} सीधा करें',
+              toolbarColor: Colors.white,
+              toolbarWidgetColor: navy,
+              initAspectRatio: CropAspectRatioPreset.original,
+              lockAspectRatio: false,
+            )],
+          );
+          if (cropped == null) continue;
+          final image = InputImage.fromFilePath(cropped.path);
+          final latinText = (await latin.processImage(image)).text.trim();
+          final devanagariText = (await devanagari.processImage(image)).text.trim();
+          final parts = <String>[
+            if (devanagariText.isNotEmpty) 'देवनागरी:\\n' + devanagariText,
+            if (latinText.isNotEmpty) 'Latin/अंक:\\n' + latinText,
+          ];
+          results.add('===== दस्तावेज़ ${i + 1} (अलग स्रोत) =====\\n' + (parts.isEmpty ? 'कोई साफ़ टेक्स्ट नहीं मिला।' : parts.join('\\n\\n')));
+        }
+      } finally {
+        await latin.close();
+        await devanagari.close();
+      }
+      if (!mounted) return;
+      final combined = results.join('\\n\\n');
+      setState(() => documentText = combined.length > 18000 ? combined.substring(0, 18000) : combined);
+      if (documentText.trim().isEmpty) {
+        note(context, 'चुनी गई तस्वीरों से साफ़ टेक्स्ट नहीं मिला। साफ़ और सीधी तस्वीरें चुनें।');
+      } else {
+        note(context, '${results.length} दस्तावेज़ों का टेक्स्ट फ़ोन पर निकला। हर दस्तावेज़ का नाम/मालिक खुद जाँचें; AI को भेजने से पहले सुधारें।');
+      }
+    } catch (_) {
+      if (mounted) note(context, 'दस्तावेज़ पढ़े नहीं जा सके। साफ़ तस्वीरें चुनकर दोबारा कोशिश करें।');
+    } finally {
+      if (mounted) setState(() => readingDocument = false);
+    }
+  }
+
+  Future<void> removePhotoBackground() async {
+    if (removingBackground) return;
+    try {
+      final picked = await documentPicker.pickImage(source: ImageSource.gallery);
+      if (picked == null || !mounted) return;
+      setState(() => removingBackground = true);
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        maxWidth: 1200,
+        maxHeight: 1600,
+        compressFormat: ImageCompressFormat.jpg,
+        compressQuality: 92,
+        uiSettings: [AndroidUiSettings(
+          toolbarTitle: 'फोटो काटें',
+          toolbarColor: Colors.white,
+          toolbarWidgetColor: navy,
+          initAspectRatio: CropAspectRatioPreset.original,
+          lockAspectRatio: false,
+        )],
+      );
+      if (cropped == null || !mounted) return;
+      final segmenter = SelfieSegmenter(mode: SegmenterMode.single, enableRawSizeMask: true);
+      try {
+        final mask = await segmenter.processImage(InputImage.fromFilePath(cropped.path));
+        if (mask == null) throw Exception('व्यक्ति की पहचान नहीं हुई');
+        final source = img.decodeImage(await io.File(cropped.path).readAsBytes());
+        if (source == null) throw Exception('फोटो पढ़ी नहीं जा सकी');
+        final output = img.Image(width: source.width, height: source.height, numChannels: 4);
+        for (var y = 0; y < source.height; y++) {
+          final my = (y * mask.height / source.height).floor().clamp(0, mask.height - 1).toInt();
+          for (var x = 0; x < source.width; x++) {
+            final mx = (x * mask.width / source.width).floor().clamp(0, mask.width - 1).toInt();
+            final confidence = mask.confidences[my * mask.width + mx].clamp(0.0, 1.0);
+            final alpha = confidence < 0.35 ? 0 : confidence > 0.78 ? 255 : ((confidence - 0.35) / 0.43 * 255).round();
+            final p = source.getPixel(x, y);
+            output.setPixelRgba(x, y, p.r.toInt(), p.g.toInt(), p.b.toInt(), alpha);
+          }
+        }
+        final png = Uint8List.fromList(img.encodePng(output));
+        if (!mounted) return;
+        setState(() => preparedPhotoBytes = png);
+        note(context, 'बैकग्राउंड हटाने का ड्राफ्ट तैयार है। किनारों और चेहरे को जाँचें; सरकारी फोटो नियम अलग से मिलाएँ।');
+      } finally {
+        await segmenter.close();
+      }
+    } catch (_) {
+      if (mounted) note(context, 'बैकग्राउंड नहीं हट पाया। साफ़, सामने से ली गई व्यक्ति की फोटो चुनें।');
+    } finally {
+      if (mounted) setState(() => removingBackground = false);
+    }
+  }
+
+  Future<void> previewPreparedPhoto() async {
+    final bytes = preparedPhotoBytes;
+    if (bytes == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('बैकग्राउंड हटाई गई फोटो'),
+        content: SizedBox(
+          width: 280,
+          child: Image.memory(bytes, fit: BoxFit.contain),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें'))],
+      ),
+    );
+  }
+
+  Future<void> startFloatingAssistant() async {
+    try {
+      final granted = await nativeZing.invokeMethod<bool>('requestOverlayPermission') ?? false;
+      if (!granted) {
+        if (mounted) note(context, 'ऊपर दिखने की अनुमति चालू करके ZingZone में वापस आएँ, फिर Floating Pop दबाएँ।');
+        return;
+      }
+      await nativeZing.invokeMethod<bool>('startOverlay');
+      if (mounted) note(context, 'Floating Zing AI चालू है। इसे स्क्रीन पर खिसका सकते हैं।');
+    } on PlatformException catch (e) {
+      if (mounted) note(context, 'Floating Pop शुरू नहीं हुआ: ${e.message ?? e.code}');
+    }
+  }
+
+  Future<void> enableAutomaticPageReader() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Automatic Page Reader'),
+        content: const Text('अनुमति देने पर ZingZone समर्थित ब्राउज़र में केवल सरकारी .gov.in और .nic.in पेज का दिखाई देने वाला टेक्स्ट पढ़ेगा और उसका विश्लेषण Cloudflare/Gemini को भेजेगा। यह OTP, पासवर्ड, CAPTCHA, भुगतान, लॉगिन, प्रोफ़ाइल और डैशबोर्ड पेज छोड़ देगा। फ़ॉर्म में भरी निजी जानकारी भेजने से बचने के लिए इनपुट बॉक्स का लिखा हुआ मान नहीं पढ़ा जाएगा। आप Android Settings में यह अनुमति कभी भी बंद कर सकते हैं।'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('रद्द करें')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('सहमति और आगे')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken();
+      if (token == null || token.isEmpty) throw Exception('Firebase sign-in token नहीं मिला।');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('zing_firebase_id_token', token);
+      await nativeZing.invokeMethod<bool>('enableAutoRead', {'enabled': true});
+      if (mounted) note(context, 'Android Accessibility Settings खुल गई हैं। वहाँ Zing Zone Page Reader को खुद चालू करना होगा।');
+    } on PlatformException catch (e) {
+      if (mounted) note(context, 'Page Reader सेट नहीं हुआ: ${e.message ?? e.code}');
+    }
+  }
+
+  Future<void> openDemoForm() async {
+    const html = '''<!doctype html><html lang="hi"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Zing Zone Safe Demo Form</title><body style="font:16px Arial;padding:18px;max-width:650px;margin:auto"><h2>डेमो आवेदन फ़ॉर्म</h2><p>यह केवल परीक्षण के लिए नकली जानकारी वाला फ़ॉर्म है। कोई डेटा कहीं जमा नहीं होगा।</p><form onsubmit="event.preventDefault();document.getElementById('result').textContent='डेमो: सबमिट बटन दबाया गया — कोई डेटा भेजा नहीं गया।';"><label for="applicant_name">आवेदक का पूरा नाम</label><input id="applicant_name" name="applicant_name" autocomplete="name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="father_name">पिता का नाम</label><input id="father_name" name="father_name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="dob">जन्मतिथि</label><input id="dob" name="dob" type="date" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="qualification">शैक्षणिक योग्यता</label><select id="qualification" name="qualification" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><option value="">चुनें</option><option value="12th">12वीं</option><option value="graduate">स्नातक</option><option value="postgraduate">स्नातकोत्तर</option></select><label for="marks">प्राप्त अंक (0 से 100)</label><input id="marks" name="marks" type="number" min="0" max="100" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="email">ईमेल</label><input id="email" name="email" type="email" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label><input type="checkbox" name="consent"> यह डेमो चेकबॉक्स है (AI इसे नहीं छुएगा)</label><p id="result"></p><button type="submit">डेमो सबमिट (स्थानीय)</button></form></body></html>''';
+    setState(() { pageText=''; fields=[]; aiAnswer=''; });
+    await web.loadHtmlString(html);
+    if(mounted) note(context,'डेमो फ़ॉर्म खुल गया। पहले फ़ील्ड पहचानें, फिर AI से भरें।');
+  }
+  Future<void> openSite() async {
+    var raw=urlController.text.trim();
+    if(raw.isEmpty){note(context,'पहले आधिकारिक वेबसाइट का पता डालो।');return;}
+    if(!raw.contains('://')) raw='https://'+raw;
+    final uri=Uri.tryParse(raw);
+    if(uri==null||uri.scheme!='https'||!uri.hasAuthority){note(context,'सही HTTPS वेबसाइट का पता डालो।');return;}
+    final host=uri.host.toLowerCase();
+    if(!(host=='gov.in'||host.endsWith('.gov.in')||host=='nic.in'||host.endsWith('.nic.in'))) {
+      final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+        title:const Text('वेबसाइट की पुष्टि'),
+        content:Text('यह पता सामान्य सरकारी डोमेन जैसा नहीं दिखता: '+host+'. आगे बढ़ने से पहले इसकी आधिकारिकता जाँचो।'),
+        actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('वापस')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('फिर भी खोलें'))]));
+      if(ok!=true)return;
+    }
+    try{await web.loadRequest(uri);}catch(_){if(mounted)note(context,'वेबसाइट नहीं खुली। पता और इंटरनेट जाँचो।');}
+  }
+  Future<void> inspect() async {
+    setState(()=>analyzing=true);
+    try {
+      await web.runJavaScript(r"""
+        (() => {
+          const nodes=Array.from(document.querySelectorAll('input,select,textarea,button')).slice(0,180);
+          const fields=nodes.map((e,i)=>{
+            const id=e.id||'';
+            const label=id?document.querySelector('label[for="'+CSS.escape(id)+'"]'):null;
+            const parent=e.closest('label');
+            return {index:i,tag:e.tagName.toLowerCase(),type:(e.type||'').toLowerCase(),name:e.name||'',id:id,
+              label:(label?.innerText||parent?.innerText||e.getAttribute('aria-label')||(e.getAttribute('aria-labelledby')?document.getElementById(e.getAttribute('aria-labelledby'))?.innerText:'')||e.getAttribute('data-label')||e.placeholder||e.getAttribute('title')||e.closest('fieldset')?.querySelector('legend')?.innerText||e.name||e.id||'').trim().slice(0,160),
+              required:!!e.required,disabled:!!e.disabled,autocomplete:e.autocomplete||'',pattern:e.getAttribute('pattern')||'',maxLength:e.maxLength||-1,minLength:e.minLength||0,min:e.min||'',max:e.max||'',form:e.form?.getAttribute('name')||e.form?.id||'',
+              options:e.tagName==='SELECT'?Array.from(e.options).slice(0,60).map(o=>({text:o.text.trim(),value:o.value,disabled:o.disabled})):[]};
+          });
+          ZingLiveForm.postMessage(JSON.stringify({text:(document.body?.innerText||'').slice(0,8000),fields}));
+        })()
+      """);
+    } catch(_){if(mounted){setState(()=>analyzing=false);note(context,'इस वेबसाइट ने पेज पढ़ने की अनुमति नहीं दी।');}}
+  }
+  Future<void> fillFields({Map<int,String> suggestions = const {}}) async {
+    final usable=fields.where((f)=>['input','select','textarea'].contains(f['tag'])&&!['password','hidden','file','submit','button','reset','checkbox','radio','image'].contains(f['type'])&&f['disabled']!=true).toList();
+    if(usable.isEmpty){note(context,'सुरक्षित रूप से भरने योग्य सामान्य फ़ील्ड नहीं मिले।');return;}
+    final ctrls=<int,TextEditingController>{}; final selected=<int>{};
+    for(var i=0;i<usable.length;i++){final idx=(usable[i]['index'] as num?)?.toInt()??i;ctrls[i]=TextEditingController(text:suggestions[idx]??'');}
+    final ok=await showModalBottomSheet<bool>(context:context,isScrollControlled:true,useSafeArea:true,showDragHandle:true,builder:(ctx)=>StatefulBuilder(builder:(ctx,setSheet)=>Padding(
+      padding:EdgeInsets.fromLTRB(12,8,12,MediaQuery.of(ctx).viewInsets.bottom+10),
+      child:SizedBox(height:MediaQuery.of(ctx).size.height*.75,child:Column(children:[
+        const Text('फ़ील्ड जाँचें और भरें',style:TextStyle(fontSize:19,fontWeight:FontWeight.w900,color:navy)),
+        const Text('सिर्फ चुने गए फ़ील्ड भरेंगे। OTP, पासवर्ड, फ़ाइल और सबमिट नहीं छुए जाएँगे।',style:TextStyle(fontSize:11,color:muted)),
+        Expanded(child:ListView.builder(itemCount:usable.length,itemBuilder:(ctx,i){final f=usable[i];return Column(children:[
+          CheckboxListTile(value:selected.contains(i),onChanged:(v)=>setSheet(()=>v==true?selected.add(i):selected.remove(i)),title:Text((f['label']??f['name']??('फ़ील्ड '+(i+1).toString())).toString()),subtitle:Text((f['tag']??'').toString()+' '+(f['type']??'').toString()+(f['required']==true?' • ज़रूरी':''))),
+          TextField(controller:ctrls[i],decoration:InputDecoration(isDense:true,hintText:'इस फ़ील्ड की सही जानकारी डालें')),
+        ]);})),
+        SizedBox(width:double.infinity,child:FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:Text(selected.length.toString()+' चुने हुए फ़ील्ड भरें')))
+      ])))));
+    if(ok==true&&selected.isNotEmpty){
+      final payload=<Map<String,dynamic>>[];
+      for(final i in selected){final v=ctrls[i]!.text.trim();if(v.isNotEmpty)payload.add({'index':usable[i]['index']??i,'value':v});}
+      try{
+        final confidenceFields=<Map<String,dynamic>>[];
+        for(final item in payload){
+          final idx=(item['index'] as num?)?.toInt();
+          final field=usable.firstWhere((f)=>(f['index'] as num?)?.toInt()==idx,orElse:()=>{});
+          if(field.isEmpty)continue;
+          final isSelect=field['tag']=='select';
+          final value=item['value'].toString().trim().toLowerCase();
+          final options=field['options'] is List?(field['options'] as List):const [];
+          final optionMatched=!isSelect||options.any((option){
+            if(option is String)return option.trim().toLowerCase()==value;
+            if(option is Map)return (option['value']??'').toString().trim().toLowerCase()==value||(option['text']??'').toString().trim().toLowerCase()==value;
+            return false;
+          });
+          confidenceFields.add({
+            'label':(field['label']??field['name']??'फ़ील्ड').toString(),
+            'valuePresent':value.isNotEmpty,
+            'labelMatched':true,
+            'formatValid':true,
+            'selectOptionMatched':optionMatched,
+            'evidence':[{'kind':'user_confirmed','confirmed':true,'confidence':1,'sourceId':'manual-review-'+idx.toString()}]
+          });
+        }
+        if(confidenceFields.length!=payload.length)throw Exception('कुछ फ़ील्ड की पहचान नहीं हुई; इसलिए सुरक्षित भराई रोकी गई।');
+        final prefs=await SharedPreferences.getInstance();
+        final worker=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+        final workerUri=Uri.tryParse(worker);
+        if(workerUri==null||workerUri.scheme!='https'||workerUri.host.isEmpty)throw Exception('Cloudflare Worker URL गलत है।');
+        final gateClient=io.HttpClient()..connectionTimeout=const Duration(seconds:15);
+        try{
+          final gateReq=await gateClient.postUrl(workerUri).timeout(const Duration(seconds:15));
+          gateReq.headers.contentType=io.ContentType.json;
+          gateReq.headers.set('Authorization',await _zingFirebaseBearer());
+          gateReq.write(jsonEncode({'messages':[{'role':'user','text':'Validate the form draft evidence gate.'}],'formConfidence':{'fields':confidenceFields}}));
+          final gateRes=await gateReq.close().timeout(const Duration(seconds:20));
+          final gateBody=await gateRes.transform(utf8.decoder).join().timeout(const Duration(seconds:10));
+          if(gateRes.statusCode<200||gateRes.statusCode>=300)throw Exception('Confidence gate unavailable (HTTP '+gateRes.statusCode.toString()+').');
+          final gateData=jsonDecode(gateBody);
+          final confidence=gateData is Map?gateData['formConfidence']:null;
+          if(confidence is! Map||confidence['mayProceedToReview']!=true)throw Exception('Confidence gate ने कुछ फ़ील्ड रोक दिए। कृपया जानकारी और विकल्प जाँचें।');
+        }finally{gateClient.close(force:true);}
+        final data=jsonEncode(payload);
+        final js="(()=>{const data=JSON.parse("+jsonEncode(data)+");const els=Array.from(document.querySelectorAll('input,select,textarea,button')).slice(0,180);const errors=[];const ready=[];for(const x of data){const e=els[x.index];if(!e||e.disabled||['password','hidden','file','submit','button','reset','checkbox','radio','image'].includes((e.type||'').toLowerCase())||e.tagName==='BUTTON'){errors.push('फ़ील्ड '+(x.index+1)+': सुरक्षित फ़ील्ड नहीं');continue;}let v=String(x.value??'').trim();if(!v){errors.push('फ़ील्ड '+(x.index+1)+': जानकारी खाली');continue;}if(e.tagName==='SELECT'){const opt=Array.from(e.options).find(o=>!o.disabled&&(o.value===v||o.text.trim().toLocaleLowerCase()===v.toLocaleLowerCase()));if(!opt){errors.push('फ़ील्ड '+(x.index+1)+': विकल्प सूची से मेल नहीं');continue;}v=opt.value;}if(e.maxLength>0&&v.length>e.maxLength){errors.push('फ़ील्ड '+(x.index+1)+': अधिकतम अक्षर सीमा पार');continue;}if(e.minLength>0&&v.length<e.minLength){errors.push('फ़ील्ड '+(x.index+1)+': न्यूनतम अक्षर सीमा पूरी नहीं');continue;}if(e.pattern){try{if(!new RegExp('^(?:'+e.pattern+')\$').test(v)){errors.push('फ़ील्ड '+(x.index+1)+': वेबसाइट के निर्धारित प्रारूप से मेल नहीं');continue;}}catch(_){errors.push('फ़ील्ड '+(x.index+1)+': वेबसाइट का validation नियम समझ नहीं आया');continue;}}if(e.type==='date'){if(!/^\\d{4}-\\d{2}-\\d{2}\$/.test(v)){errors.push('फ़ील्ड '+(x.index+1)+': तारीख का प्रारूप गलत');continue;}const stamp=Date.parse(v+'T00:00:00Z');if((e.min&&stamp<Date.parse(e.min+'T00:00:00Z'))||(e.max&&stamp>Date.parse(e.max+'T00:00:00Z'))){errors.push('फ़ील्ड '+(x.index+1)+': तारीख अनुमत सीमा से बाहर');continue;}}if(e.type==='email'&&(!v.includes('@')||v.startsWith('@')||v.endsWith('@')||!v.split('@')[1].includes('.')||v.split('@')[1].startsWith('.')||v.split('@')[1].endsWith('.'))){errors.push('फ़ील्ड '+(x.index+1)+': ईमेल प्रारूप गलत');continue;}if(e.type==='number'&&(!Number.isFinite(Number(v))||(e.min!==''&&Number(v)<Number(e.min))||(e.max!==''&&Number(v)>Number(e.max)))){errors.push('फ़ील्ड '+(x.index+1)+': संख्या सीमा से बाहर');continue;}ready.push({e,v});}if(errors.length)return 'कुछ जानकारी नहीं भरी गई: '+errors.join('; ');for(const x of ready){const e=x.e;const p=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(p,'value')?.set;if(setter)setter.call(e,x.v);else \e.value=x.v;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}const mismatches=ready.filter(x=>String(x.e.value)!==String(x.v));return JSON.stringify({filled:ready.length,verified:ready.length-mismatches.length,mismatches:mismatches.map(x=>x.e.name||x.e.id||x.e.tagName)});})()";
+        final result=await web.runJavaScriptReturningResult(js);
+        if(mounted){try{final report=jsonDecode(result.toString()) as Map;final filled=(report['filled']??0).toString();final verified=(report['verified']??0).toString();final mismatches=(report['mismatches'] as List? ?? []).length;if(mismatches==0){note(context,'$verified / $filled फ़ील्ड भरने के बाद पेज पर दोबारा जाँचे गए। फ़ॉर्म जमा नहीं हुआ।');}else{note(context,'$verified / $filled फ़ील्ड जाँचे गए। $mismatches फ़ील्ड मेल नहीं खाए—उन्हें खुद जाँचें।');}}catch(_){note(context,'फ़ील्ड भरने का परिणाम मिला, लेकिन सत्यापन रिपोर्ट नहीं पढ़ी जा सकी। स्क्रीन पर खुद जाँचें।');}}
+      }catch(_){if(mounted)note(context,'ऑटो-फिल नहीं चला; फ़ील्ड खुद भरो।');}
+    }
+    for(final ctl in ctrls.values)ctl.dispose();
+  }
+  Future<void> aiFillFields() async {
+    if(fields.isEmpty){note(context,'पहले फ़ील्ड पहचानें।');return;}
+    final info=TextEditingController(text:documentText.isEmpty?'':'निकाला गया दस्तावेज़ टेक्स्ट (कृपया जाँचें):\\n'+documentText);
+    final confirmed=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      title:const Text('जानकारी देकर AI से फ़ील्ड भरवाएँ'),
+      content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+        const Text('केवल वही सही जानकारी लिखें जो इस फ़ॉर्म में चाहिए। AI खाली जानकारी का अनुमान नहीं लगाएगा। यह जानकारी AI तैयार करने के लिए Cloudflare/Gemini को भेजी जाएगी। OTP, पासवर्ड, CAPTCHA, बैंक/कार्ड विवरण यहाँ न लिखें।',style:TextStyle(fontSize:12,color:muted)),
+        const SizedBox(height:10),
+        TextField(controller:info,minLines:4,maxLines:8,decoration:const InputDecoration(labelText:'फ़ॉर्म के लिए आपकी जानकारी',hintText:'उदाहरण: नाम, जन्मतिथि, जिला, शिक्षा…'))
+      ])),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('रद्द करें')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('AI से तैयार करें'))]
+    ));
+    if(confirmed!=true){info.dispose();return;}
+    if(info.text.trim().isEmpty){info.dispose();note(context,'पहले फ़ॉर्म की सही जानकारी लिखें।');return;}
+    final factsConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('जानकारी की पुष्टि'),
+        content: const Text('क्या आपने लिखी हुई जानकारी और हर OCR दस्तावेज़ का टेक्स्ट पढ़कर जाँच लिया है? गलत/दूसरे व्यक्ति की जानकारी होने पर फ़ील्ड न भरें।'),
+        actions: [
+          TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('अभी नहीं')),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('हाँ, जाँच लिया')),
+        ],
+      ),
+    );
+    if (factsConfirmed != true) { info.dispose(); return; }
+    setState(()=>analyzing=true);
+    try{
+      final safe=fields.where((f)=>['input','select','textarea'].contains(f['tag'])&&!['password','hidden','file','submit','button','reset','checkbox','radio','image'].contains((f['type']??'').toString().toLowerCase())&&f['disabled']!=true).toList();
+      final schema=safe.map((f)=>{'index':f['index'],'label':f['label'],'name':f['name'],'id':f['id'],'tag':f['tag'],'type':f['type'],'required':f['required'],'autocomplete':f['autocomplete'],'pattern':f['pattern'],'maxLength':f['maxLength'],'minLength':f['minLength'],'min':f['min'],'max':f['max'],'form':f['form'],'options':f['options']}).toList();
+      final prompt='You are a strict Indian form-field matching engine. Return ONLY valid JSON object mapping field index strings to suggested values, e.g. {"0":"value"}. Match each field using its visible label, id, name, autocomplete, input type, surrounding form and available options. Distinguish applicant name from father/mother/guardian name, date of birth from certificate issue date, permanent from correspondence address, photo from signature/thumb impression, and qualification from marks. Never put one person\'s name into another person\'s field. Use ONLY explicit user-provided facts. Never infer identity, dates, category, disability, marks, eligibility or other personal facts. If the label is unclear, two fields could match, document owner is uncertain, or the value is missing, OMIT that field. For select fields use only an exact enabled option value. Never fill password, OTP, CAPTCHA, file upload, payment, bank/card, checkbox/radio, or submit fields. This is a draft for user review, not submission.\nCurrent page URL: '+urlController.text+'\nVisible page text: '+pageText.substring(0,pageText.length>3500?3500:pageText.length)+'\nAllowed fields JSON: '+jsonEncode(schema)+'\nUser-provided facts: '+info.text.trim();
+      final prefs=await SharedPreferences.getInstance();
+      final worker=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+      final uri=Uri.tryParse(worker);
+      if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('Cloudflare Worker URL गलत है');
+      final client=io.HttpClient()..connectionTimeout=const Duration(seconds:20);
+      String aiText;
+      try{
+        final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
+        req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());
+        req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));
+        final res=await req.close().timeout(const Duration(seconds:40));
+        final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
+        if(res.statusCode<200||res.statusCode>=300)throw Exception('AI server HTTP '+res.statusCode.toString());
+        final d=jsonDecode(body);
+        aiText=(d is Map?d['answer']:null)?.toString().trim()??'';
+        if(aiText.isEmpty)throw Exception('AI ने खाली जवाब दिया');
+      }finally{client.close(force:true);}
+      final raw=aiText.replaceAll(RegExp(r'^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$'), '');
+      final decoded=jsonDecode(raw);
+      if(decoded is! Map)throw const FormatException('AI output was not a JSON object');
+      final suggestions=<int,String>{};
+      final evidenceText=(info.text+'\n'+documentText).toLowerCase().replaceAll(RegExp(r'\s+'),' ').trim();
+      var rejectedForNoEvidence=0;
+      for(final entry in decoded.entries){
+        final idx=int.tryParse(entry.key.toString());
+        if(idx==null||entry.value==null)continue;
+        final val=entry.value.toString().trim();
+        if(val.isEmpty)continue;
+        final matching=safe.where((f)=>(f['index'] as num?)?.toInt()==idx).toList();
+        if(matching.isEmpty)continue;
+        final field=matching.first;
+        final normalized=val.toLowerCase().replaceAll(RegExp(r'\s+'),' ').trim();
+        final directEvidence=normalized.isNotEmpty&&evidenceText.contains(normalized);
+        final options=field['options'] is List?(field['options'] as List):const [];
+        final exactOption=options.any((option){
+          if(option is String)return option.trim().toLowerCase()==normalized;
+          if(option is Map)return (option['value']??'').toString().trim().toLowerCase()==normalized||(option['text']??'').toString().trim().toLowerCase()==normalized;
+          return false;
+        });
+        // Confidence gate: only accept values directly evidenced by user/OCR text or an exact page option.
+        if(!directEvidence&&!exactOption){rejectedForNoEvidence++;continue;}
+        suggestions[idx]=val;
+      }
+      if (suggestions.isNotEmpty) {
+        final gatePairs = <Map<String, dynamic>>[];
+        final gateFields = <Map<String, dynamic>>[];
+        for (final entry in suggestions.entries) {
+          final matches = safe.where((f) => (f['index'] as num?)?.toInt() == entry.key).toList();
+          if (matches.isEmpty) continue;
+          final field = matches.first;
+          final value = entry.value.trim();
+          final type = (field['type'] ?? '').toString().toLowerCase();
+          var formatValid = value.isNotEmpty;
+          final maxLength = (field['maxLength'] as num?)?.toInt() ?? -1;
+          final minLength = (field['minLength'] as num?)?.toInt() ?? 0;
+          if (maxLength > 0 && value.length > maxLength) formatValid = false;
+          if (minLength > 0 && value.length < minLength) formatValid = false;
+          final pattern = (field['pattern'] ?? '').toString();
+          if (pattern.isNotEmpty) {
+            try { if (!RegExp('^(?:' + pattern + r')$').hasMatch(value)) formatValid = false; }
+            catch (_) { formatValid = false; }
+          }
+          if (type == 'email' && !RegExp(r'^[^@ ]+@[^@ ]+\.[^@ ]+$').hasMatch(value)) formatValid = false;
+          if (type == 'number') {
+            final number = num.tryParse(value);
+            if (number == null) formatValid = false;
+            final min = num.tryParse((field['min'] ?? '').toString());
+            final max = num.tryParse((field['max'] ?? '').toString());
+            if (number != null && min != null && number < min) formatValid = false;
+            if (number != null && max != null && number > max) formatValid = false;
+          }
+          final options = field['options'] is List ? (field['options'] as List) : const [];
+          final optionMatched = field['tag'] != 'select' || options.any((option) {
+            if (option is String) return option.trim().toLowerCase() == value.toLowerCase();
+            if (option is Map) return (option['value'] ?? '').toString().trim().toLowerCase() == value.toLowerCase() || (option['text'] ?? '').toString().trim().toLowerCase() == value.toLowerCase();
+            return false;
+          });
+          gatePairs.add({'formIndex': entry.key, 'value': value});
+          gateFields.add({
+            'label': (field['label'] ?? '').toString(),
+            'valuePresent': value.isNotEmpty,
+            'labelMatched': (field['label'] ?? '').toString().trim().isNotEmpty,
+            'formatValid': formatValid,
+            'selectOptionMatched': optionMatched,
+            'evidence': [{'kind': 'user_confirmed', 'confirmed': true, 'confidence': 1, 'sourceId': 'user-reviewed-form-facts'}]
+          });
+        }
+        if (gateFields.isNotEmpty) {
+          final gateClient = io.HttpClient()..connectionTimeout = const Duration(seconds: 15);
+          try {
+            final gateRequest = await gateClient.postUrl(uri).timeout(const Duration(seconds: 15));
+            gateRequest.headers.contentType = io.ContentType.json;
+            gateRequest.headers.set('Authorization', await _zingFirebaseBearer());
+            gateRequest.write(jsonEncode({'messages': [{'role':'user','text':'उपयोगकर्ता ने स्रोत जानकारी की पुष्टि की है।'}], 'formConfidence': {'fields': gateFields}}));
+            final gateResponse = await gateRequest.close().timeout(const Duration(seconds: 25));
+            final gateBody = await gateResponse.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
+            if (gateResponse.statusCode < 200 || gateResponse.statusCode >= 300) throw Exception('Confidence gate failed');
+            final gateData = jsonDecode(gateBody);
+            final report = gateData is Map ? gateData['formConfidence'] : null;
+            final reports = report is Map && report['results'] is List ? report['results'] as List : const [];
+            final approved = <int>{};
+            for (var i = 0; i < reports.length && i < gatePairs.length; i++) {
+              if (reports[i] is Map && reports[i]['decision'] == 'SAFE_TO_FILL_DRAFT') approved.add((gatePairs[i]['formIndex'] as num).toInt());
+            }
+            final blocked = suggestions.length - approved.length;
+            suggestions.removeWhere((index, _) => !approved.contains(index));
+            if (blocked > 0 && mounted) note(context, '$blocked फ़ील्ड स्रोत/लेबल/फ़ॉर्मेट की जाँच में रोके गए।');
+          } finally { gateClient.close(force: true); }
+        } else { suggestions.clear(); }
+      }
+      if(!mounted)return;
+      if(suggestions.isEmpty){
+        note(context,rejectedForNoEvidence>0?'AI के सुझावों का स्रोत से सीधा मिलान नहीं हुआ। गलत जानकारी रोकने के लिए फ़ील्ड नहीं भरे।':'AI को कोई निश्चित फ़ील्ड वैल्यू नहीं मिली। जानकारी जाँचकर दोबारा कोशिश करें।');
+      }else{
+        if(rejectedForNoEvidence>0)note(context,'कुछ सुझावों का स्रोत प्रमाण नहीं मिला, इसलिए उन्हें रोक दिया गया।');
+        await fillFields(suggestions:suggestions);
+      }
+    }catch(e){if(mounted)note(context,'AI से फ़ील्ड तैयार नहीं हुए। Firebase AI Logic/Internet जाँचें और फ़ील्ड खुद भरें।');}
+    finally{info.dispose();if(mounted)setState(()=>analyzing=false);}
+  }
+
+  Future<void> askAI() async {
+    if(pageText.isEmpty&&fields.isEmpty){note(context,'पहले वेबसाइट खोलकर फ़ील्ड पहचानो।');return;}
+    final consent=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      title:const Text('वेबसाइट का पाठ AI को भेजें?'),
+      content:const Text('AI इस पेज का दिखने वाला पाठ और फ़ील्ड लेबल Cloudflare/Gemini को भेजेगा। अगर पेज पर निजी या गोपनीय जानकारी है, तो पहले उसे जाँचें। OTP, पासवर्ड और बैंक/कार्ड विवरण कभी न भेजें।'),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('रद्द करें')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('भेजें और समझाएँ'))]
+    ));
+    if(consent!=true)return;
+    setState(()=>aiAnswer='AI मदद तैयार हो रही है…');
+    try{
+      final prefs=await SharedPreferences.getInstance();
+      final worker=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+      final fieldText=fields.map((f)=>(f['label']??'') .toString()+' | '+(f['tag']??'').toString()+' '+(f['type']??'').toString()+' | required='+(f['required']??false).toString()).join('\n');
+      final prompt='इस सरकारी फ़ॉर्म को हिंदी में समझाओ। वेबसाइट: '+urlController.text+'\nपेज पाठ:\n'+pageText.substring(0,pageText.length>6000?6000:pageText.length)+'\nफ़ील्ड:\n'+fieldText.substring(0,fieldText.length>4000?4000:fieldText.length)+'\nअनुमान मत लगाना। OTP, पासवर्ड, CAPTCHA, भुगतान और अंतिम सबमिट उपयोगकर्ता के नियंत्रण में रहने चाहिए।';
+      String answer='';
+      if(worker.isNotEmpty){
+        final uri=Uri.tryParse(worker);if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('Cloudflare URL गलत है');
+        final client=io.HttpClient()..connectionTimeout=const Duration(seconds:20);
+        try{final req=await client.postUrl(uri);req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));final res=await req.close().timeout(const Duration(seconds:35));final body=await res.transform(utf8.decoder).join();if(res.statusCode<200||res.statusCode>=300)throw Exception('AI server HTTP '+res.statusCode.toString());final d=jsonDecode(body);answer=(d is Map?d['answer']:null)?.toString()??'';}finally{client.close(force:true);}
+      }else{
+        final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are a careful Indian government form assistant. Reply in Hindi. Never invent facts. The user must handle OTP, password, CAPTCHA, payments and final submission.'));
+        final response=await model.generateContent([Content.text(prompt)]);answer=response.text??'';
+      }
+      if(mounted)setState(()=>aiAnswer=answer.isEmpty?'AI ने खाली जवाब दिया।':answer);
+    }catch(_){if(mounted)setState(()=>aiAnswer='AI कनेक्शन नहीं हुआ। Settings में Cloudflare Worker URL या Firebase AI सेटिंग जाँचो।');}
+  }
+  Future<void> checkEligibility() async {
+    if(pageText.trim().isEmpty){note(context,'पहले आधिकारिक भर्ती/योजना की सूचना वाला पेज खोलें और फ़ील्ड पहचानें।');return;}
+    final facts=TextEditingController(text:documentText.isEmpty?'':'दस्तावेज़ से निकला टेक्स्ट (पहले खुद जाँचें):\\n'+documentText);
+    final ok=await showDialog<bool>(context:context,builder:(ctx)=>AlertDialog(
+      title:const Text('प्रारंभिक पात्रता जाँच'),
+      content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+        const Text('अपनी उम्र, शिक्षा, राज्य/श्रेणी जैसी केवल ज़रूरी जानकारी लिखें। निकाला गया दस्तावेज़ टेक्स्ट गलत हो सकता है—पहले जाँचें। यह जानकारी AI को भेजी जाएगी। परिणाम केवल प्रारंभिक जाँच है, आधिकारिक निर्णय नहीं।',style:TextStyle(fontSize:12,color:muted)),
+        const SizedBox(height:10),
+        TextField(controller:facts,minLines:4,maxLines:8,decoration:const InputDecoration(labelText:'पात्रता जाँच के लिए जानकारी'))
+      ])),
+      actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('रद्द करें')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('जाँचें'))]
+    ));
+    if(ok!=true){facts.dispose();return;}
+    if(facts.text.trim().isEmpty){facts.dispose();note(context,'पहले अपनी सही जानकारी लिखें।');return;}
+    setState(()=>aiAnswer='पात्रता की शर्तें पढ़ी जा रही हैं…');
+    try{
+      final prompt='केवल इस पेज पर दिए गए आधिकारिक पाठ के आधार पर प्रारंभिक पात्रता तुलना करो। URL: '+urlController.text+'\\nआधिकारिक पेज का दिखने वाला पाठ: '+pageText.substring(0,pageText.length>6500?6500:pageText.length)+'\\nउपयोगकर्ता द्वारा जाँची गई जानकारी: '+facts.text.trim()+'\\nउत्तर हिंदी में दो: (1) सूचना में लिखी हर प्रासंगिक शर्त और उसका स्रोत-पाठ, (2) जानकारी से मेल/न-मेल/अज्ञात, (3) कौन-से दस्तावेज़ या तथ्य अभी चाहिए। कोई नियम, तारीख, आयु-सीमा, छूट या पात्रता स्वयं मत गढ़ो। अगर सूचना में शर्त साफ़ नहीं है तो अज्ञात कहो। अंतिम निर्णय विभाग/आधिकारिक पोर्टल का होगा; इसे आवेदन की गारंटी मत बताना।';
+      final prefs=await SharedPreferences.getInstance();
+      final worker=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+      final uri=Uri.tryParse(worker);
+      if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('Cloudflare Worker URL गलत है');
+      final client=io.HttpClient()..connectionTimeout=const Duration(seconds:20);
+      String answer='';
+      try{
+        final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
+        req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());
+        req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));
+        final res=await req.close().timeout(const Duration(seconds:40));
+        final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
+        if(res.statusCode<200||res.statusCode>=300)throw Exception('AI server HTTP '+res.statusCode.toString());
+        final data=jsonDecode(body);
+        answer=(data is Map?data['answer']:null)?.toString().trim()??'';
+      }finally{client.close(force:true);}
+      if(mounted)setState(()=>aiAnswer=answer.isEmpty?'AI ने कोई परिणाम नहीं दिया।':answer);
+    }catch(_){if(mounted)setState(()=>aiAnswer='प्रारंभिक पात्रता जाँच नहीं हो सकी। आधिकारिक सूचना और जानकारी खुद जाँचें।');}
+    finally{facts.dispose();}
+  }
+  @override Widget build(BuildContext c)=>Column(children:[
+    Padding(padding:const EdgeInsets.fromLTRB(14,2,8,8),child:Row(children:[
+      const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('LIVE FORM',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1,color:navy,fontSize:16)),Text('चैट के साथ वेबसाइट पर काम करो',style:TextStyle(fontSize:11,color:muted))])),
+      TextButton.icon(onPressed:loading||analyzing?null:openDemoForm,icon:const Icon(Icons.science_outlined,size:16),label:const Text('डेमो फ़ॉर्म')),
+      IconButton(onPressed:()=>Navigator.of(c).pop(),icon:const Icon(Icons.close),tooltip:'Live form बंद करें')
+    ])),
+    Padding(padding:const EdgeInsets.fromLTRB(12,0,12,6),child:Wrap(spacing:7,runSpacing:5,children:[
+      OutlinedButton.icon(onPressed:startFloatingAssistant,icon:const Icon(Icons.picture_in_picture_alt_outlined,size:17),label:const Text('Floating Pop')),
+      OutlinedButton.icon(onPressed:enableAutomaticPageReader,icon:const Icon(Icons.chrome_reader_mode_outlined,size:17),label:const Text('Auto Page Reader')),
+    ])),
+    Padding(padding:const EdgeInsets.symmetric(horizontal:10),child:Row(children:[
+      Expanded(child:TextField(controller:urlController,keyboardType:TextInputType.url,autocorrect:false,decoration:const InputDecoration(isDense:true,prefixIcon:Icon(Icons.language),hintText:'आधिकारिक वेबसाइट का HTTPS पता'))),
+      const SizedBox(width:5),FilledButton(onPressed:loading?null:openSite,child:const Text('खोलें'))
+    ])),
+    Padding(padding:const EdgeInsets.symmetric(horizontal:12,vertical:4),child:Row(children:[
+      OutlinedButton.icon(onPressed:readingDocument?null:readDocument,icon:const Icon(Icons.document_scanner_outlined),label:Text(readingDocument?'दस्तावेज़ पढ़ रहे हैं…':'दस्तावेज़ से टेक्स्ट निकालें')),
+      const SizedBox(width:6),
+      OutlinedButton.icon(onPressed:removingBackground?null:removePhotoBackground,icon:const Icon(Icons.person_remove_alt_1_outlined),label:Text(removingBackground?'बैकग्राउंड हट रहा है…':'फोटो बैकग्राउंड हटाएँ')),
+      if(preparedPhotoBytes!=null) TextButton.icon(onPressed:previewPreparedPhoto,icon:const Icon(Icons.visibility_outlined),label:const Text('फोटो देखें')),
+      const SizedBox(width:8),
+      if(documentText.isNotEmpty)const Expanded(child:Text('टेक्स्ट मिला • AI को भेजने से पहले जाँचें',style:TextStyle(fontSize:10,color:muted)))
+    ])),
+    if(loading)const LinearProgressIndicator(minHeight:2),
+    Expanded(child:Stack(children:[WebViewWidget(controller:web),if(aiAnswer.isNotEmpty)Positioned(left:8,right:8,bottom:8,child:Material(elevation:4,borderRadius:BorderRadius.circular(12),child:Container(padding:const EdgeInsets.all(10),constraints:const BoxConstraints(maxHeight:125),child:SingleChildScrollView(child:Text(aiAnswer,style:const TextStyle(fontSize:12,color:navy))))))])),
+    Padding(padding:const EdgeInsets.all(7),child:Wrap(alignment:WrapAlignment.center,spacing:6,runSpacing:4,children:[
+      OutlinedButton.icon(onPressed:loading||analyzing?null:inspect,icon:const Icon(Icons.document_scanner_outlined),label:Text(analyzing?'पहचान रहे हैं…':'फ़ील्ड पहचानें')),
+      OutlinedButton.icon(onPressed:fields.isEmpty||analyzing?null:()=>fillFields(),icon:const Icon(Icons.edit_note),label:const Text('खुद भरें')),
+      FilledButton.icon(onPressed:fields.isEmpty||analyzing?null:aiFillFields,icon:const Icon(Icons.auto_awesome),label:const Text('AI से भरें')),
+      OutlinedButton.icon(onPressed:analyzing?null:checkEligibility,icon:const Icon(Icons.verified_user_outlined),label:const Text('पात्रता जाँचें')),
+      IconButton(onPressed:askAI,tooltip:'फॉर्म समझाएँ',icon:const Icon(Icons.help_outline))
+    ])),
+    const Padding(padding:EdgeInsets.fromLTRB(10,0,10,7),child:Text('OTP, CAPTCHA, पासवर्ड, भुगतान और अंतिम सबमिट उपयोगकर्ता के नियंत्रण में रहेंगे।',textAlign:TextAlign.center,style:TextStyle(fontSize:10,color:muted)))
+  ]);
+}
 
 class PortalBrowserPage extends StatefulWidget {
   const PortalBrowserPage({super.key});
@@ -433,13 +1149,57 @@ class _PortalAssistPageState extends State<PortalAssistPage> {
 class ChatMemory {
   static const _historyKey = 'zz_chat_history_v1';
   static const _currentKey = 'zz_current_chat_v1';
-  static Future<String> loadCurrent() async { final p=await SharedPreferences.getInstance(); return p.getString(_currentKey) ?? ''; }
-  static Future<void> saveCurrent(String value) async { final p=await SharedPreferences.getInstance(); await p.setString(_currentKey,value); }
+  static Future<String> loadCurrent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final local = prefs.getString(_currentKey) ?? '';
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chats').doc('current').get();
+        final remote = doc.data()?['content'];
+        if (remote is String && remote.isNotEmpty) {
+          await prefs.setString(_currentKey, remote);
+          return remote;
+        }
+      } catch (_) {}
+    }
+    return local;
+  }
+  static Future<void> saveCurrent(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_currentKey, value);
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chats').doc('current').set({
+          'content': value,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    }
+  }
   static const _draftsKey = 'zz_chat_drafts_v1';
 
   static Future<List<String>> loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_historyKey) ?? <String>[];
+    final local = prefs.getStringList(_historyKey) ?? <String>[];
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chats').orderBy('createdAt', descending: true).limit(50).get();
+        final remote = snapshot.docs.map((doc) => doc.data()['content'])
+            .whereType<String>().where((value) => value.trim().isNotEmpty).toList();
+        if (remote.isNotEmpty) {
+          final merged = <String>[...remote, ...local.where((item) => !remote.contains(item))].take(50).toList();
+          await prefs.setStringList(_historyKey, merged);
+          return merged;
+        }
+      } catch (_) {}
+    }
+    return local;
   }
 
   static Future<List<String>> loadDrafts() async {
@@ -454,6 +1214,16 @@ class ChatMemory {
     final history = prefs.getStringList(_historyKey) ?? <String>[];
     history.insert(0, value);
     await prefs.setStringList(_historyKey, history.take(50).toList());
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chats').add({
+          'content': value,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
   }
 
   static Future<void> saveDraft(String draft) async {

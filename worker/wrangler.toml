@@ -1,6 +1,11 @@
-name = "zingzone-ai"
+name = "zing-zone-ai"
 main = "src/index.js"
-compatibility_date = "2026-10-16"
+compatibility_date = "2026-10-27"
 
-[ai]
-binding = "AI"
+[[ratelimits]]
+name = "AI_LIMITER"
+namespace_id = "42001"
+
+[ratelimits.simple]
+limit = 20
+period = 60

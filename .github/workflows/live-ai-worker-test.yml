@@ -1,0 +1,89 @@
+name: Live AI Worker Security Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/live-form-chat-panel
+    paths:
+      - ".github/workflows/live-ai-worker-test.yml"
+      - "worker/src/**"
+      - "worker/wrangler.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check Worker module syntax
+        run: |
+          node --input-type=module --check < worker/src/index.js
+          node --input-type=module --check < worker/src/portal_adapters.js
+
+      - name: Check portal adapter registry
+        run: |
+          node --input-type=module <<'JS'
+          import { resolvePortalAdapter } from './worker/src/portal_adapters.js';
+          const cases = [
+            ['ssc.gov.in', 'ssc'],
+            ['upsconline.nic.in', 'upsc'],
+            ['rpsc.rajasthan.gov.in', 'rpsc'],
+            ['sso.rajasthan.gov.in', 'rajasthan-sso'],
+            ['uidai.gov.in', 'uidai'],
+            ['epfindia.gov.in', 'epfo'],
+            ['pmkisan.gov.in', 'pm-kisan'],
+            ['scholarships.gov.in', 'national-scholarship-portal'],
+          ];
+          for (const [host, expected] of cases) {
+            const actual = resolvePortalAdapter(host)?.id;
+            if (actual !== expected) throw new Error(host + ': expected ' + expected + ', got ' + actual);
+          }
+          if (resolvePortalAdapter('example.com') !== null) throw new Error('Unknown host must use generic adapter');
+          console.log('PASS: all known portal adapters resolve and unknown hosts stay generic.');
+          JS
+
+      - name: Check deployed Worker health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 \
+            "https://zing-zone-ai.gyarasigujjar57.workers.dev" -o health.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open("health.json"))
+          assert data.get("status") == "ok", data
+          assert data.get("configured") is True, data
+          assert data.get("page_read_support") is True, data
+          print("PASS: deployed Worker health and Gemini configuration are present.")
+          PY
+
+      - name: Verify unauthenticated AI calls are rejected
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 20 -o unauth.json -w "%{http_code}" \
+            -H "Content-Type: application/json" -X POST \
+            --data '{"messages":[{"role":"user","text":"security check"}]}' \
+            "https://zing-zone-ai.gyarasigujjar57.workers.dev")
+          test "$code" = "401"
+          python3 - <<'PY'
+          import json
+          data=json.load(open("unauth.json"))
+          assert "Firebase" in data.get("error", ""), data
+          print("PASS: unauthenticated requests are rejected.")
+          PY
+
+      - name: Verify malformed Firebase token is rejected
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --show-error --max-time 20 -o bad-token.json -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer invalid.token.signature" \
+            -X POST --data '{"messages":[{"role":"user","text":"security check"}]}' \
+            "https://zing-zone-ai.gyarasigujjar57.workers.dev")
+          test "$code" = "401"
+          echo "PASS: malformed Firebase ID tokens are rejected."

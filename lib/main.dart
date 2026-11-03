@@ -24,6 +24,13 @@ Future<void> main() async {
   await Firebase.initializeApp(options: firebaseOptions);
   runApp(const ZingZone());
 }
+Future<String> _zingFirebaseBearer() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) throw Exception('पहले Zing Zone में साइन इन करें।');
+  final token = await user.getIdToken();
+  if (token == null || token.isEmpty) throw Exception('Firebase token नहीं मिला।');
+  return 'Bearer $token';
+}
 void note(BuildContext c,String s)=>ScaffoldMessenger.of(c).showSnackBar(SnackBar(content:Text(s),behavior:SnackBarBehavior.floating));
 void page(BuildContext c,Widget w)=>Navigator.push(c,MaterialPageRoute(builder:(_)=>w));
 Future<void> signInWithGoogle(BuildContext c) async {try{final googleUser=await GoogleSignIn().signIn();if(googleUser==null)return;final googleAuth=await googleUser.authentication;final credential=GoogleAuthProvider.credential(accessToken:googleAuth.accessToken,idToken:googleAuth.idToken);await FirebaseAuth.instance.signInWithCredential(credential);if(c.mounted)Navigator.pushAndRemoveUntil(c,MaterialPageRoute(builder:(_)=>const Shell()),(r)=>false);}on FirebaseAuthException catch(e){if(c.mounted)note(c,'Google sign-in failed: ${e.message??e.code}');}catch(_){if(c.mounted)note(c,'Google sign-in complete nahi hua. Firebase Console mein Google provider aur Android SHA/OAuth setup check karo.');}}
@@ -312,7 +319,7 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
         final client=io.HttpClient()..connectionTimeout=const Duration(seconds:15);
         try {
           final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
-          req.headers.contentType=io.ContentType.json;
+          req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());
           req.write(jsonEncode({
             'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList(),
             if(imageBytes!=null) 'image': {'mimeType':attachedImageMimeType??'image/jpeg','data':base64Encode(imageBytes)}
@@ -612,7 +619,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       String aiText;
       try{
         final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
-        req.headers.contentType=io.ContentType.json;
+        req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());
         req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));
         final res=await req.close().timeout(const Duration(seconds:40));
         final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));
@@ -658,7 +665,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       if(worker.isNotEmpty){
         final uri=Uri.tryParse(worker);if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('Cloudflare URL गलत है');
         final client=io.HttpClient()..connectionTimeout=const Duration(seconds:20);
-        try{final req=await client.postUrl(uri);req.headers.contentType=io.ContentType.json;req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));final res=await req.close().timeout(const Duration(seconds:35));final body=await res.transform(utf8.decoder).join();if(res.statusCode<200||res.statusCode>=300)throw Exception('AI server HTTP '+res.statusCode.toString());final d=jsonDecode(body);answer=(d is Map?d['answer']:null)?.toString()??'';}finally{client.close(force:true);}
+        try{final req=await client.postUrl(uri);req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));final res=await req.close().timeout(const Duration(seconds:35));final body=await res.transform(utf8.decoder).join();if(res.statusCode<200||res.statusCode>=300)throw Exception('AI server HTTP '+res.statusCode.toString());final d=jsonDecode(body);answer=(d is Map?d['answer']:null)?.toString()??'';}finally{client.close(force:true);}
       }else{
         final model=FirebaseAI.googleAI().generativeModel(model:'gemini-2.5-flash',systemInstruction:Content.system('You are a careful Indian government form assistant. Reply in Hindi. Never invent facts. The user must handle OTP, password, CAPTCHA, payments and final submission.'));
         final response=await model.generateContent([Content.text(prompt)]);answer=response.text??'';
@@ -691,7 +698,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       String answer='';
       try{
         final req=await client.postUrl(uri).timeout(const Duration(seconds:20));
-        req.headers.contentType=io.ContentType.json;
+        req.headers.contentType=io.ContentType.json;req.headers.set('Authorization',await _zingFirebaseBearer());
         req.write(jsonEncode({'messages':[{'role':'user','text':prompt}]}));
         final res=await req.close().timeout(const Duration(seconds:40));
         final body=await res.transform(utf8.decoder).join().timeout(const Duration(seconds:15));

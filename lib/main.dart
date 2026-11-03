@@ -424,6 +424,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
           SharedPreferences.getInstance().then((prefs) {
             prefs.remove('zing_live_page_text');
             prefs.remove('zing_live_page_fields');
+            prefs.remove('zing_live_current_url');
           });
           if(mounted) setState(() {loading=true;fields=[];pageText='';});
         },

@@ -59,8 +59,6 @@ export default {
       return Response.json({ error: lastMessage, retryable: lastStatus >= 500 }, { status: lastStatus === 429 ? 429 : 502, headers: cors });
     } catch {
       return Response.json({ error: "Could not reach Gemini API from Worker" }, { status: 502, headers: cors });
-    } catch {
-      return Response.json({ error: "Could not reach Gemini API from Worker" }, { status: 502, headers: cors });
     }
   }
 };

@@ -120,6 +120,22 @@ jobs:
           if "zing_page_reader_description" not in text:
               text = text.replace("</resources>", '    <string name="zing_page_reader_description">Reads visible text on supported browser pages only after you turn on automatic page reading in Zing Zone.</string>\n</resources>')
           values.write_text(text)
+          styles = Path("android/app/src/main/res/values/styles.xml")
+          styles.parent.mkdir(parents=True, exist_ok=True)
+          styles.write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar" />
+          </resources>
+          """)
+          styles_v35 = Path("android/app/src/main/res/values-v35/styles.xml")
+          styles_v35.parent.mkdir(parents=True, exist_ok=True)
+          styles_v35.write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Ucrop.CropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+              </style>
+          </resources>
+          """)
           kt = Path("android/app/src/main/kotlin/com/gyarasigujjar57/zingzone")
           kt.mkdir(parents=True, exist_ok=True)
           (kt / "MainActivity.kt").write_text(r'''package com.gyarasigujjar57.zingzone

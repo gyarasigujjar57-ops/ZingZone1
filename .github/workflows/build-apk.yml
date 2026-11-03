@@ -207,7 +207,6 @@ jobs:
                       gravity = Gravity.CENTER
                       setBackgroundColor(Color.rgb(65, 94, 238))
                       elevation = 12f
-                      setOnClickListener { toggle() }
                   }
                   bubble.background = android.graphics.drawable.GradientDrawable().apply {
                       shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -223,12 +222,13 @@ jobs:
                   }
                   val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                   val title = TextView(this).apply { text = "ZING AI  ·  LIVE PAGE"; textSize = 13f; setTextColor(Color.rgb(24, 34, 65)); setTypeface(null, 1) }
+                  title.setOnTouchListener(DragTouch(false))
                   val minimize = TextView(this).apply { text = " — "; textSize = 22f; setTextColor(Color.DKGRAY); setOnClickListener { toggle() } }
                   header.addView(title, LinearLayout.LayoutParams(0, dp(42), 1f)); header.addView(minimize)
                   answer = TextView(this).apply { text = "सरकारी वेबसाइट खोलें। अनुमति मिलने पर AI पेज पढ़कर यहाँ समझाएगा।"; textSize = 13f; setTextColor(Color.rgb(35, 43, 66)); setPadding(0, dp(8), 0, dp(8)) }
                   panel.addView(header); panel.addView(answer)
                   root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(bubble) }
-                  root.setOnTouchListener(DragTouch())
+                  bubble.setOnTouchListener(DragTouch(true))
                   wm.addView(root, params)
                   handler.post(refresh)
               }
@@ -237,13 +237,11 @@ jobs:
                   root.removeAllViews()
                   if (expanded) {
                       root.addView(panel, LinearLayout.LayoutParams(dp(300), dp(280)))
-                      val close = TextView(this).apply { text = "छोटा करें"; gravity = Gravity.CENTER; setTextColor(Color.rgb(65,94,238)); setPadding(0, dp(8), 0, dp(4)); setOnClickListener { toggle() } }
-                      panel.addView(close)
                   } else root.addView(bubble)
                   try { wm.updateViewLayout(root, params) } catch (_: Exception) {}
               }
               private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-              private inner class DragTouch : View.OnTouchListener {
+              private inner class DragTouch(private val toggleOnTap: Boolean) : View.OnTouchListener {
                   var sx = 0f; var sy = 0f; var wx = 0; var wy = 0; var moved = false
                   override fun onTouch(v: View, e: MotionEvent): Boolean {
                       when (e.action) {
@@ -255,7 +253,7 @@ jobs:
                               try { wm.updateViewLayout(root, params) } catch (_: Exception) {}
                               return true
                           }
-                          MotionEvent.ACTION_UP -> { if (!moved) toggle(); return true }
+                          MotionEvent.ACTION_UP -> { if (!moved && toggleOnTap) toggle(); return true }
                       }
                       return false
                   }

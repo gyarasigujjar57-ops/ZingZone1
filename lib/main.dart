@@ -519,9 +519,9 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
         if (source == null) throw Exception('फोटो पढ़ी नहीं जा सकी');
         final output = img.Image(width: source.width, height: source.height, numChannels: 4);
         for (var y = 0; y < source.height; y++) {
-          final my = (y * mask.height / source.height).floor().clamp(0, mask.height - 1);
+          final my = (y * mask.height / source.height).floor().clamp(0, mask.height - 1).toInt();
           for (var x = 0; x < source.width; x++) {
-            final mx = (x * mask.width / source.width).floor().clamp(0, mask.width - 1);
+            final mx = (x * mask.width / source.width).floor().clamp(0, mask.width - 1).toInt();
             final confidence = mask.confidences[my * mask.width + mx].clamp(0.0, 1.0);
             final alpha = confidence < 0.35 ? 0 : confidence > 0.78 ? 255 : ((confidence - 0.35) / 0.43 * 255).round();
             final p = source.getPixel(x, y);

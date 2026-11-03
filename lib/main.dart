@@ -589,6 +589,46 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       final payload=<Map<String,dynamic>>[];
       for(final i in selected){final v=ctrls[i]!.text.trim();if(v.isNotEmpty)payload.add({'index':usable[i]['index']??i,'value':v});}
       try{
+        final confidenceFields=<Map<String,dynamic>>[];
+        for(final item in payload){
+          final idx=(item['index'] as num?)?.toInt();
+          final field=usable.firstWhere((f)=>(f['index'] as num?)?.toInt()==idx,orElse:()=>{});
+          if(field.isEmpty)continue;
+          final isSelect=field['tag']=='select';
+          final value=item['value'].toString().trim().toLowerCase();
+          final options=field['options'] is List?(field['options'] as List):const [];
+          final optionMatched=!isSelect||options.any((option){
+            if(option is String)return option.trim().toLowerCase()==value;
+            if(option is Map)return (option['value']??'').toString().trim().toLowerCase()==value||(option['text']??'').toString().trim().toLowerCase()==value;
+            return false;
+          });
+          confidenceFields.add({
+            'label':(field['label']??field['name']??'फ़ील्ड').toString(),
+            'valuePresent':value.isNotEmpty,
+            'labelMatched':true,
+            'formatValid':true,
+            'selectOptionMatched':optionMatched,
+            'evidence':[{'kind':'user_confirmed','confirmed':true,'confidence':1,'sourceId':'manual-review-'+idx.toString()}]
+          });
+        }
+        if(confidenceFields.length!=payload.length)throw Exception('कुछ फ़ील्ड की पहचान नहीं हुई; इसलिए सुरक्षित भराई रोकी गई।');
+        final prefs=await SharedPreferences.getInstance();
+        final worker=(prefs.getString('zing_ai_worker_url')??'https://zing-zone-ai.gyarasigujjar57.workers.dev').trim();
+        final workerUri=Uri.tryParse(worker);
+        if(workerUri==null||workerUri.scheme!='https'||workerUri.host.isEmpty)throw Exception('Cloudflare Worker URL गलत है।');
+        final gateClient=io.HttpClient()..connectionTimeout=const Duration(seconds:15);
+        try{
+          final gateReq=await gateClient.postUrl(workerUri).timeout(const Duration(seconds:15));
+          gateReq.headers.contentType=io.ContentType.json;
+          gateReq.headers.set('Authorization',await _zingFirebaseBearer());
+          gateReq.write(jsonEncode({'messages':[{'role':'user','text':'Validate the form draft evidence gate.'}],'formConfidence':{'fields':confidenceFields}}));
+          final gateRes=await gateReq.close().timeout(const Duration(seconds:20));
+          final gateBody=await gateRes.transform(utf8.decoder).join().timeout(const Duration(seconds:10));
+          if(gateRes.statusCode<200||gateRes.statusCode>=300)throw Exception('Confidence gate unavailable (HTTP '+gateRes.statusCode.toString()+').');
+          final gateData=jsonDecode(gateBody);
+          final confidence=gateData is Map?gateData['formConfidence']:null;
+          if(confidence is! Map||confidence['mayProceedToReview']!=true)throw Exception('Confidence gate ने कुछ फ़ील्ड रोक दिए। कृपया जानकारी और विकल्प जाँचें।');
+        }finally{gateClient.close(force:true);}
         final data=jsonEncode(payload);
         final js="(()=>{const data=JSON.parse("+jsonEncode(data)+");const els=Array.from(document.querySelectorAll('input,select,textarea,button')).slice(0,180);const errors=[];const ready=[];for(const x of data){const e=els[x.index];if(!e||e.disabled||['password','hidden','file','submit','button','reset','checkbox','radio','image'].includes((e.type||'').toLowerCase())||e.tagName==='BUTTON'){errors.push('फ़ील्ड '+(x.index+1)+': सुरक्षित फ़ील्ड नहीं');continue;}let v=String(x.value??'').trim();if(!v){errors.push('फ़ील्ड '+(x.index+1)+': जानकारी खाली');continue;}if(e.tagName==='SELECT'){const opt=Array.from(e.options).find(o=>!o.disabled&&(o.value===v||o.text.trim().toLocaleLowerCase()===v.toLocaleLowerCase()));if(!opt){errors.push('फ़ील्ड '+(x.index+1)+': विकल्प सूची से मेल नहीं');continue;}v=opt.value;}if(e.maxLength>0&&v.length>e.maxLength){errors.push('फ़ील्ड '+(x.index+1)+': अधिकतम अक्षर सीमा पार');continue;}if(e.minLength>0&&v.length<e.minLength){errors.push('फ़ील्ड '+(x.index+1)+': न्यूनतम अक्षर सीमा पूरी नहीं');continue;}if(e.pattern){try{if(!new RegExp('^(?:'+e.pattern+')\$').test(v)){errors.push('फ़ील्ड '+(x.index+1)+': वेबसाइट के निर्धारित प्रारूप से मेल नहीं');continue;}}catch(_){errors.push('फ़ील्ड '+(x.index+1)+': वेबसाइट का validation नियम समझ नहीं आया');continue;}}if(e.type==='date'){if(!/^\\d{4}-\\d{2}-\\d{2}\$/.test(v)){errors.push('फ़ील्ड '+(x.index+1)+': तारीख का प्रारूप गलत');continue;}const stamp=Date.parse(v+'T00:00:00Z');if((e.min&&stamp<Date.parse(e.min+'T00:00:00Z'))||(e.max&&stamp>Date.parse(e.max+'T00:00:00Z'))){errors.push('फ़ील्ड '+(x.index+1)+': तारीख अनुमत सीमा से बाहर');continue;}}if(e.type==='email'&&(!v.includes('@')||v.startsWith('@')||v.endsWith('@')||!v.split('@')[1].includes('.')||v.split('@')[1].startsWith('.')||v.split('@')[1].endsWith('.'))){errors.push('फ़ील्ड '+(x.index+1)+': ईमेल प्रारूप गलत');continue;}if(e.type==='number'&&(!Number.isFinite(Number(v))||(e.min!==''&&Number(v)<Number(e.min))||(e.max!==''&&Number(v)>Number(e.max)))){errors.push('फ़ील्ड '+(x.index+1)+': संख्या सीमा से बाहर');continue;}ready.push({e,v});}if(errors.length)return 'कुछ जानकारी नहीं भरी गई: '+errors.join('; ');for(const x of ready){const e=x.e;const p=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(p,'value')?.set;if(setter)setter.call(e,x.v);else \e.value=x.v;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}const mismatches=ready.filter(x=>String(x.e.value)!==String(x.v));return JSON.stringify({filled:ready.length,verified:ready.length-mismatches.length,mismatches:mismatches.map(x=>x.e.name||x.e.id||x.e.tagName)});})()";
         final result=await web.runJavaScriptReturningResult(js);

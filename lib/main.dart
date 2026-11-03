@@ -915,7 +915,7 @@ class ChatMemory {
     if (user != null) {
       try {
         final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid)
-            .collection('chatHistory').doc('current').get();
+            .collection('chats').doc('current').get();
         final remote = doc.data()?['content'];
         if (remote is String && remote.isNotEmpty) {
           await prefs.setString(_currentKey, remote);
@@ -932,7 +932,7 @@ class ChatMemory {
     if (user != null) {
       try {
         await FirebaseFirestore.instance.collection('users').doc(user.uid)
-            .collection('chatHistory').doc('current').set({
+            .collection('chats').doc('current').set({
           'content': value,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -962,7 +962,7 @@ class ChatMemory {
     if (user != null) {
       try {
         await FirebaseFirestore.instance.collection('users').doc(user.uid)
-            .collection('chatHistory').add({
+            .collection('chats').add({
           'content': value,
           'createdAt': FieldValue.serverTimestamp(),
         });

@@ -71,6 +71,17 @@ jobs:
         run: |
           cd android
           ./gradlew signingReport
+      - name: Smoke test live Zing Zone AI Worker (Step 1)
+        run: |
+          set -euo pipefail
+          WORKER_URL="https://zing-zone-ai.gyarasigujjar57.workers.dev"
+          health="$(curl --fail --silent --show-error "$WORKER_URL/")"
+          echo "$health" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("status")=="online", d'
+          reply="$(curl --fail --silent --show-error --max-time 90 \\
+            -H 'Content-Type: application/json' \\
+            -d '{"messages":[{"role":"user","text":"Mujhe army ka form bharna hai"}]}' \\
+            "$WORKER_URL/")"
+          echo "$reply" | python3 -c 'import json,sys; d=json.load(sys.stdin); a=d.get("answer", ""); assert isinstance(a,str) and len(a.strip())>=20, d; print("Live Worker AI reply received:", a[:500])'
       - name: Build release APK
         run: |
           for attempt in 1 2 3; do

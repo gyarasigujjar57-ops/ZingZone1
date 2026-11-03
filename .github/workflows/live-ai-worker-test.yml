@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/live-ai-worker-test.yml"
       - "worker/src/**"
+      - "worker/wrangler.toml"
 
 permissions:
   contents: read

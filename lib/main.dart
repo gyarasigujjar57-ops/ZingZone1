@@ -361,7 +361,7 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
     final message='AI जवाब नहीं मिल पाया ('+e.code+'). इंटरनेट या AI सर्वर की उपलब्धता जाँचनी होगी।';
     if(mounted) { setState(()=>msgs.add(['ai',message])); await _persistConversation(); }
   } catch(e) {
-    final detail=(workerFailure??e.toString()).replaceAll(RegExp(r'\\s+'),' ').trim();
+    final detail=(workerFailure??e.toString()).replaceAll(RegExp(r'\s+'),' ').trim();
     final message='AI से जवाब नहीं मिला। कारण: '+(detail.isEmpty?'सर्वर से जवाब नहीं आया।':detail);
     if(mounted) { setState(()=>msgs.add(['ai',message])); await _persistConversation(); }
   } finally { if(mounted) setState(()=>sending=false); }
@@ -637,7 +637,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       final decoded=jsonDecode(raw);
       if(decoded is! Map)throw const FormatException('AI output was not a JSON object');
       final suggestions=<int,String>{};
-      final evidenceText=(info.text+'\\n'+documentText).toLowerCase().replaceAll(RegExp(r'\\s+'),' ').trim();
+      final evidenceText=(info.text+'\n'+documentText).toLowerCase().replaceAll(RegExp(r'\s+'),' ').trim();
       var rejectedForNoEvidence=0;
       for(final entry in decoded.entries){
         final idx=int.tryParse(entry.key.toString());
@@ -647,7 +647,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
         final matching=safe.where((f)=>(f['index'] as num?)?.toInt()==idx).toList();
         if(matching.isEmpty)continue;
         final field=matching.first;
-        final normalized=val.toLowerCase().replaceAll(RegExp(r'\\s+'),' ').trim();
+        final normalized=val.toLowerCase().replaceAll(RegExp(r'\s+'),' ').trim();
         final directEvidence=normalized.isNotEmpty&&evidenceText.contains(normalized);
         final options=field['options'] is List?(field['options'] as List):const [];
         final exactOption=options.any((option){

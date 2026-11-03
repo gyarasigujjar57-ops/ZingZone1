@@ -11,9 +11,9 @@ void main() {
 
     await tester.pumpWidget(const ZingZone());
     expect(find.text('ZING ZONE'), findsOneWidget);
-    expect(find.text('Explore app as guest'), findsOneWidget);
-    await tester.ensureVisible(find.text('Explore app as guest'));
-    await tester.tap(find.text('Explore app as guest'));
+    expect(find.text('Continue as Guest — no signup'), findsOneWidget);
+    await tester.ensureVisible(find.text('Continue as Guest — no signup'));
+    await tester.tap(find.text('Continue as Guest — no signup'));
     await tester.pumpAndSettle();
     expect(find.text('AI Chat'), findsOneWidget);
     expect(find.text('Store'), findsOneWidget);

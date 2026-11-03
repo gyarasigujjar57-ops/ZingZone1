@@ -17,23 +17,48 @@ export default {
     }
     if (contents[contents.length - 1].role !== "user") return Response.json({ error: "Last message must be user" }, { status: 400, headers: cors });
     try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents,
-          generationConfig: { maxOutputTokens: 1400 }
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        const message = data?.error?.message || "Gemini API request failed";
-        return Response.json({ error: message }, { status: response.status === 429 ? 429 : 502, headers: cors });
+      const models = ["gemini-3.8-flash", "gemini-3.6-flash"];
+      let lastMessage = "Gemini API request failed";
+      let lastStatus = 503;
+      for (const model of models) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let response;
+          let data;
+          try {
+            response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                contents,
+                generationConfig: { maxOutputTokens: 1400 }
+              })
+            });
+            data = await response.json();
+          } catch {
+            lastMessage = "Could not reach Gemini API from Worker";
+            lastStatus = 502;
+            break;
+          }
+          if (response.ok) {
+            const answer = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
+            if (answer) return Response.json({ answer, model }, { headers: cors });
+            lastMessage = "Gemini returned no answer";
+            lastStatus = 502;
+            break;
+          }
+          lastMessage = data?.error?.message || "Gemini API request failed";
+          lastStatus = response.status;
+          const retryable = response.status === 503 || response.status === 500 || response.status === 502;
+          if (!retryable) {
+            return Response.json({ error: lastMessage }, { status: response.status === 429 ? 429 : 502, headers: cors });
+          }
+          if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 1200));
+        }
       }
-      const answer = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
-      if (!answer) return Response.json({ error: "Gemini returned no answer" }, { status: 502, headers: cors });
-      return Response.json({ answer }, { headers: cors });
+      return Response.json({ error: lastMessage, retryable: lastStatus >= 500 }, { status: lastStatus === 429 ? 429 : 502, headers: cors });
+    } catch {
+      return Response.json({ error: "Could not reach Gemini API from Worker" }, { status: 502, headers: cors });
     } catch {
       return Response.json({ error: "Could not reach Gemini API from Worker" }, { status: 502, headers: cors });
     }

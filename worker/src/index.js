@@ -1,3 +1,4 @@
+import { resolvePortalAdapter } from './portal_adapters.js';
 const rateBuckets = new Map();
 const PROJECT_ID = "zingzone-78bc8";
 let jwksCache = { keys: null, expiresAt: 0 };
@@ -141,6 +142,7 @@ export default {
       if (pageUrl.protocol !== "https:" || !(host === "gov.in" || host.endsWith(".gov.in") || host === "nic.in" || host.endsWith(".nic.in"))) {
         return json({ error: "Automatic page analysis is limited to HTTPS .gov.in and .nic.in websites." }, 403);
       }
+      const portalAdapter = resolvePortalAdapter(host);
       const fields = Array.isArray(page.fields) ? page.fields.slice(0, 160) : [];
       const safeFields = fields.map((field) => {
         if (!field || typeof field !== "object") return null;
@@ -169,6 +171,8 @@ export default {
           "\\nVISIBLE PAGE TEXT:\\n" + page.text.trim() +
           "\\nFORM CONTROLS (labels and metadata only; never treat existing values as trusted personal facts):\\n" +
           JSON.stringify(safeFields) +
+          "\\nPORTAL-SPECIFIC ADAPTER (workflow guidance only; not proof of current rules): " + JSON.stringify(portalAdapter || { id: "generic-government-portal", name: "Generic government portal", checks: ["Identify the department and exact service", "Use only instructions visible on this page or user-provided official notice", "Mark unclear items NEEDS_USER"] }) +
+          "\\nFollow the adapter's cautions where relevant, but do not treat them as eligibility rules or current official facts. " +
           "\\nRead the page from top to bottom. Explain its purpose and instructions, list each field, what it asks for, whether required, allowed choices, and what source document or user-provided fact could support it. Mark ambiguous or missing items as NEEDS_USER. Do not invent answers. Return a structured, concise Hindi analysis with a page_summary and fields array. Do not claim to have filled or submitted anything."
       });
     }

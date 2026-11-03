@@ -43,6 +43,9 @@ jobs:
           if "namespace =" not in a:
               a = a.replace("android {", 'android {\n    namespace = "com.gyarasigujjar57.zingzone"', 1)
           a = re.sub(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "com.gyarasigujjar57.zingzone"', a, count=1)
+          # Avoid R8 failures from optional ML Kit recognizer classes during release packaging.
+          if "isMinifyEnabled = false" not in a:
+              a = re.sub(r'(release\\s*\\{)', r'\\1\\n            isMinifyEnabled = false\\n            isShrinkResources = false', a, count=1)
           app.write_text(a)
           PY
       - name: Configure Devanagari OCR and image cropper Android components

@@ -76,9 +76,13 @@ export default {
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
     const identity = await verifyFirebaseToken(request);
     if (!identity) return json({ error: "Valid Firebase sign-in is required." }, 401);
-    // Per-isolate best-effort guard only; configure Cloudflare global rate limiting before public launch.
     const now = Date.now();
-    if (!withinBestEffortLimit(identity.sub, now)) return json({ error: "Request limit reached. Please wait one minute." }, 429);
+    if (env.AI_LIMITER) {
+      const limit = await env.AI_LIMITER.limit({ key: identity.sub });
+      if (!limit.success) return json({ error: "Request limit reached. Please wait one minute." }, 429);
+    } else if (!withinBestEffortLimit(identity.sub, now)) {
+      return json({ error: "Request limit reached. Please wait one minute." }, 429);
+    }
     if (!env.GEMINI_API_KEY) return json({ error: "AI server is not configured." }, 503);
 
     let body;

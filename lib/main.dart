@@ -637,17 +637,35 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       final decoded=jsonDecode(raw);
       if(decoded is! Map)throw const FormatException('AI output was not a JSON object');
       final suggestions=<int,String>{};
+      final evidenceText=(info.text+'\\n'+documentText).toLowerCase().replaceAll(RegExp(r'\\s+'),' ').trim();
+      var rejectedForNoEvidence=0;
       for(final entry in decoded.entries){
         final idx=int.tryParse(entry.key.toString());
         if(idx==null||entry.value==null)continue;
         final val=entry.value.toString().trim();
         if(val.isEmpty)continue;
-        final allowed=safe.any((f)=>(f['index'] as num?)?.toInt()==idx);
-        if(allowed)suggestions[idx]=val;
+        final matching=safe.where((f)=>(f['index'] as num?)?.toInt()==idx).toList();
+        if(matching.isEmpty)continue;
+        final field=matching.first;
+        final normalized=val.toLowerCase().replaceAll(RegExp(r'\\s+'),' ').trim();
+        final directEvidence=normalized.isNotEmpty&&evidenceText.contains(normalized);
+        final options=field['options'] is List?(field['options'] as List):const [];
+        final exactOption=options.any((option){
+          if(option is String)return option.trim().toLowerCase()==normalized;
+          if(option is Map)return (option['value']??'').toString().trim().toLowerCase()==normalized||(option['text']??'').toString().trim().toLowerCase()==normalized;
+          return false;
+        });
+        // Confidence gate: only accept values directly evidenced by user/OCR text or an exact page option.
+        if(!directEvidence&&!exactOption){rejectedForNoEvidence++;continue;}
+        suggestions[idx]=val;
       }
       if(!mounted)return;
-      if(suggestions.isEmpty){note(context,'AI को कोई निश्चित फ़ील्ड वैल्यू नहीं मिली। जानकारी जाँचकर दोबारा कोशिश करें।');}
-      else{await fillFields(suggestions:suggestions);}
+      if(suggestions.isEmpty){
+        note(context,rejectedForNoEvidence>0?'AI के सुझावों का स्रोत से सीधा मिलान नहीं हुआ। गलत जानकारी रोकने के लिए फ़ील्ड नहीं भरे।':'AI को कोई निश्चित फ़ील्ड वैल्यू नहीं मिली। जानकारी जाँचकर दोबारा कोशिश करें।');
+      }else{
+        if(rejectedForNoEvidence>0)note(context,'कुछ सुझावों का स्रोत प्रमाण नहीं मिला, इसलिए उन्हें रोक दिया गया।');
+        await fillFields(suggestions:suggestions);
+      }
     }catch(e){if(mounted)note(context,'AI से फ़ील्ड तैयार नहीं हुए। Firebase AI Logic/Internet जाँचें और फ़ील्ड खुद भरें।');}
     finally{info.dispose();if(mounted)setState(()=>analyzing=false);}
   }

@@ -54,8 +54,7 @@ const ADAPTERS = [
     name: "National Scholarship Portal",
     workflow: "Keep scheme selection, academic details, institution verification and bank details separate.",
     checks: ["Do not infer income, category, marks, course or eligibility", "Never request full bank credentials or OTP", "Ask the user to verify scheme-specific requirements and institution details"]
-  }
-
+  },
   {
     hosts: ["parivahan.gov.in", "sarathi.parivahan.gov.in", "vahan.parivahan.gov.in"],
     id: "parivahan",
@@ -152,5 +151,5 @@ const ADAPTERS = [
 
 export function resolvePortalAdapter(hostname) {
   const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
-  return ADAPTERS.find(adapter => adapter.hosts.includes(host)) || null;
+  return ADAPTERS.find(adapter => adapter.hosts.some(known => host === known || host.endsWith("." + known))) || null;
 }

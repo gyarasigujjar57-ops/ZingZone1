@@ -300,7 +300,7 @@ jobs:
                       val hint = if (android.os.Build.VERSION.SDK_INT >= 26) node.hintText?.toString().orEmpty() else ""
                       if (id.contains("url_bar") || id.contains("url_view") || id.contains("location_bar") || id.contains("address_bar")) {
                           val candidate = node.text?.toString().orEmpty()
-                          if (candidate.startsWith("https://")) pageUrl = candidate
+                          if (candidate.contains("gov.in") || candidate.contains("nic.in")) pageUrl = if (candidate.startsWith("http")) candidate else "https://" + candidate
                       }
                       if (cls.contains("EditText")) {
                           val field = JSONObject().put("label", (hint.ifBlank { node.contentDescription?.toString().orEmpty() }).take(180))
@@ -318,7 +318,7 @@ jobs:
                   val content = text.toString().replace(Regex("\\n{3,}"), "\\n\\n").take(18000)
                   if (pageUrl.isBlank() || content.length < 120) return
                   val host = try { URL(pageUrl).host.lowercase() } catch (_: Exception) { return }
-                  if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return
+                  if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return\n                  if (pageUrl.contains("/login", true) || pageUrl.contains("/profile", true) || pageUrl.contains("/dashboard", true) || pageUrl.contains("/payment", true) || pageUrl.contains("/signin", true)) return
                   val lower = content.lowercase()
                   if (lower.contains("enter otp") || lower.contains("one time password") || lower.contains("captcha code") || lower.contains("upi pin") || lower.contains("card number") || lower.contains("payment gateway")) return
                   val hash = MessageDigest.getInstance("SHA-256").digest((pageUrl + content).toByteArray()).joinToString("") { "%02x".format(it) }

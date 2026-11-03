@@ -57,12 +57,6 @@ jobs:
           gradle.write_text(text)
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           xml = manifest.read_text()
-          activity = '''        <activity
-                  android:name="com.yalantis.ucrop.UCropActivity"
-                  android:screenOrientation="portrait"
-                  android:theme="@style/Ucrop.CropTheme" />'''
-          if "com.yalantis.ucrop.UCropActivity" not in xml:
-              xml = xml.replace("</application>", activity + "\n    </application>")
           manifest.write_text(xml)
           PY
 

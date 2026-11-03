@@ -15,9 +15,12 @@ void main() {
     await tester.ensureVisible(find.text('Continue as Guest — no signup'));
     await tester.tap(find.text('Continue as Guest — no signup'));
     await tester.pumpAndSettle();
-    expect(find.text('AI Chat'), findsOneWidget);
-    expect(find.text('Store'), findsOneWidget);
-    expect(find.text('Rewards'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+
+    // Assert the actual tab page widgets instead of relying on navigation
+    // label rendering, which can vary with Flutter's label behavior.
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(find.byType(StorePage), findsOneWidget);
+    expect(find.byType(RewardsPage), findsOneWidget);
+    expect(find.byType(ProfilePage), findsOneWidget);
   });
 }

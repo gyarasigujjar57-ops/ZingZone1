@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateFormConfidence } from "../src/form_confidence.js";
+import { resolvePortalAdapter } from "../src/portal_adapters.js";
 
 const trustedField = {
   label: "पूरा नाम",
@@ -41,4 +42,29 @@ test("blocks missing source evidence and malformed requests", () => {
   const missing = evaluateFormConfidence([{ ...trustedField, evidence: [] }]);
   assert.equal(missing.results[0].decision, "BLOCK");
   assert.ok(evaluateFormConfidence([]).error);
+});
+
+test("resolves the supported Indian government portal adapters", () => {
+  const cases = [
+    ["ssc.gov.in", "ssc"],
+    ["upsconline.nic.in", "upsc"],
+    ["sarathi.parivahan.gov.in", "parivahan"],
+    ["incometax.gov.in", "income-tax"],
+    ["gst.gov.in", "gst"],
+    ["eshram.gov.in", "eshram"],
+    ["ncs.gov.in", "national-career-service"],
+    ["passportindia.gov.in", "passport-seva"],
+    ["digilocker.gov.in", "digilocker"],
+    ["voters.eci.gov.in", "election-commission-voter-services"],
+    ["rsmssb.rajasthan.gov.in", "rajasthan-staff-selection-board"],
+    ["janaadhaar.rajasthan.gov.in", "rajasthan-janaadhaar"],
+    ["nrega.nic.in", "mgnrega"],
+    ["nfsa.gov.in", "national-food-security"],
+    ["serviceonline.gov.in", "service-plus-edistrict"]
+  ];
+  for (const [host, expected] of cases) {
+    assert.equal(resolvePortalAdapter(host)?.id, expected, host);
+  }
+  assert.equal(resolvePortalAdapter("unknown.gov.in"), null);
+  assert.equal(resolvePortalAdapter("fakeparivahan.gov.in"), null);
 });

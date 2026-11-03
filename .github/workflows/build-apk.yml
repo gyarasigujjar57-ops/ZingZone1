@@ -41,6 +41,12 @@ jobs:
               a = a.replace('plugins {', 'plugins {\n    id("com.google.gms.google-services")', 1)
           a = re.sub(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "com.gyarasigujjar57.zingzone"', a, count=1)
           app.write_text(a)
+          # ML Kit's Flutter bridge references all script option classes at runtime.
+          # Ship the script artifacts so R8 can resolve them in release builds.
+          dep_block = '''\ndependencies {\n    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")\n    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")\n    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")\n    implementation("com.google.mlkit:text-recognition-korean:16.0.1")\n}\n'''
+          if 'text-recognition-devanagari' not in a:
+              a += dep_block
+          app.write_text(a)
           PY
       - name: Get dependencies
         run: flutter pub get

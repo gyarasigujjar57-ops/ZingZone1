@@ -333,6 +333,9 @@ jobs:
                   val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
                   if (!prefs.getBoolean("flutter.zing_auto_page_read", false)) return
                   val root = rootInActiveWindow ?: return
+                  val isOwnApp = event.packageName?.toString() == "com.gyarasigujjar57.zingzone"
+                  val savedDomText = if (isOwnApp) prefs.getString("flutter.zing_live_page_text", "") ?: "" else ""
+                  val savedDomFields = if (isOwnApp) prefs.getString("flutter.zing_live_page_fields", "") ?: "" else ""
                   val text = StringBuilder()
                   val fields = JSONArray()
                   var pageUrl = prefs.getString("flutter.zing_live_current_url", "") ?: ""
@@ -357,8 +360,16 @@ jobs:
                       }
                       for (i in 0 until node.childCount) walk(node.getChild(i), depth + 1)
                   }
-                  walk(root, 0)
-                  val content = text.toString().replace(Regex("\n{3,}"), "\n\n").take(18000)
+                  if (savedDomText.isNotBlank()) {
+                      try {
+                          val saved = JSONArray(savedDomFields)
+                          for (i in 0 until saved.length()) fields.put(saved.getJSONObject(i))
+                      } catch (_: Exception) {}
+                  } else {
+                      walk(root, 0)
+                  }
+                  val rawContent = if (savedDomText.isNotBlank()) savedDomText else text.toString()
+                  val content = rawContent.replace(Regex("\n{3,}"), "\n\n").take(18000)
                   if (pageUrl.isBlank() || content.length < 120) return
                   val host = try { URL(pageUrl).host.lowercase() } catch (_: Exception) { return }
                   if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return

@@ -274,7 +274,7 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
       if(!mounted)return;
       final confirmed=await _reviewOcr(file.name,text);
       if(!mounted)return;
-      setState(()=>{attachedImage=bytes,attachedImageName=file.name,pendingOcrText=confirmed});
+      setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed; });
     }else{
       final picked=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf'],withData:true);
       if(picked==null||picked.files.isEmpty||!mounted)return;
@@ -293,16 +293,19 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
   }finally{if(mounted)setState(()=>sending=false);}
 }
 Future<String> _ocrImagePath(String path) async {
-  final recognizer=TextRecognizer(script:TextRecognitionScript.latin);
+  final latin=TextRecognizer(script:TextRecognitionScript.latin);
+  final devanagari=TextRecognizer(script:TextRecognitionScript.devanagiri);
   try{
     final image=InputImage.fromFilePath(path);
-    final result=await recognizer.processImage(image);
-    return result.text.trim();
-  }finally{await recognizer.close();}
+    final a=await latin.processImage(image);
+    final b=await devanagari.processImage(image);
+    return [a.text,b.text].where((v)=>v.trim().isNotEmpty).join('\\n').trim();
+  }finally{await latin.close();await devanagari.close();}
 }
 Future<String> _ocrPdf(Uint8List bytes) async {
   final document=await PdfDocument.openData(bytes);
-  final recognizer=TextRecognizer(script:TextRecognitionScript.latin);
+  final latin=TextRecognizer(script:TextRecognitionScript.latin);
+  final devanagari=TextRecognizer(script:TextRecognitionScript.devanagiri);
   final directory=await getTemporaryDirectory();
   final output=<String>[];
   try{
@@ -319,22 +322,22 @@ Future<String> _ocrPdf(Uint8List bytes) async {
         await file.writeAsBytes(rendered.bytes,flush:true);
         try{
           final result=await recognizer.processImage(InputImage.fromFilePath(path));
-          output.add('--- PDF पन्ना \u0024number ---\\n'+result.text);
+          output.add('--- PDF पन्ना \u0024number ---\n'+result.text);
         }finally{if(await file.exists())await file.delete();}
       }finally{await page.close();}
     }
-    return output.join('\\n\\n').trim();
-  }finally{await recognizer.close();await document.close();}
+    return output.join('\n\n').trim();
+  }finally{await latin.close();await devanagari.close();await document.close();}
 }
 Future<String> _reviewOcr(String fileName,String rawText) async {
   if(rawText.trim().isEmpty){note(context,'इस फ़ाइल में पढ़ने योग्य टेक्स्ट नहीं मिला। साफ़ तस्वीर या searchable PDF आज़माएँ।');return '';}
-  final safeText=rawText.replaceAllMapped(RegExp(r'(?<!\\d)(\\d{4})\\s?\\d{4}\\s?\\d{4}(?!\\d)'),(m)=>m.group(0)!.replaceAll(RegExp(r'\\d(?=.{4})'),'•'));
+  final safeText=rawText.replaceAllMapped(RegExp(r'(?<!\d)(\d{4})\s?\d{4}\s?\d{4}(?!\d)'),(m)=>m.group(0)!.replaceAll(RegExp(r'\d(?=.{4})'),'•'));
   final patterns=<String,RegExp>{
-    'नाम':RegExp(r'(?im)^(?:name|नाम)\\s*[:：-]?\\s*(.+)$'),
-    'पिता/माता का नाम':RegExp(r'(?im)^(?:father.?s? name|mother.?s? name|पिता का नाम|माता का नाम)\\s*[:：-]?\\s*(.+)$'),
-    'जन्मतिथि':RegExp(r'(?im)^(?:date of birth|dob|जन्म तिथि|जन्मतिथि)\\s*[:：-]?\\s*(.+)$'),
-    'लिंग':RegExp(r'(?im)^(?:gender|sex|लिंग)\\s*[:：-]?\\s*(.+)$'),
-    'पता':RegExp(r'(?im)^(?:address|पता)\\s*[:：-]?\\s*(.+)$'),
+    'नाम':RegExp(r'(?im)^(?:name|नाम)\s*[:：-]?\s*(.+)$'),
+    'पिता/माता का नाम':RegExp(r'(?im)^(?:father.?s? name|mother.?s? name|पिता का नाम|माता का नाम)\s*[:：-]?\s*(.+)$'),
+    'जन्मतिथि':RegExp(r'(?im)^(?:date of birth|dob|जन्म तिथि|जन्मतिथि)\s*[:：-]?\s*(.+)$'),
+    'लिंग':RegExp(r'(?im)^(?:gender|sex|लिंग)\s*[:：-]?\s*(.+)$'),
+    'पता':RegExp(r'(?im)^(?:address|पता)\s*[:：-]?\s*(.+)$'),
   };
   final controllers=<String,TextEditingController>{};
   for(final entry in patterns.entries){final match=entry.value.firstMatch(safeText);if(match!=null)controllers[entry.key]=TextEditingController(text:match.group(1)!.trim());}
@@ -354,8 +357,8 @@ Future<String> _reviewOcr(String fileName,String rawText) async {
       Expanded(child:SingleChildScrollView(child:SelectableText(safeText,style:const TextStyle(fontSize:12,height:1.45)))),
       FilledButton(onPressed:()=>Navigator.pop(ctx,[
         ...controllers.entries.map((e)=>'\u0024{e.key}: \u0024{e.value.text.trim()}'),
-        'पूरा OCR टेक्स्ट:\\n\u0024safeText'
-      ].join('\\n')),style:FilledButton.styleFrom(backgroundColor:blue,minimumSize:const Size.fromHeight(48)),child:const Text('जाँची हुई जानकारी चैट में जोड़ें')),
+        'पूरा OCR टेक्स्ट:\n\u0024safeText'
+      ].join('\n')),style:FilledButton.styleFrom(backgroundColor:blue,minimumSize:const Size.fromHeight(48)),child:const Text('जाँची हुई जानकारी चैट में जोड़ें')),
     ])),
   )));
   for(final controller in controllers.values){controller.dispose();}

@@ -105,7 +105,8 @@ jobs:
               android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows" />
           """)
           values = Path("android/app/src/main/res/values/strings.xml")
-          text = values.read_text()
+          values.parent.mkdir(parents=True, exist_ok=True)
+          text = values.read_text() if values.exists() else '<?xml version="1.0" encoding="utf-8"?>\\n<resources></resources>\\n'
           if "zing_page_reader_description" not in text:
               text = text.replace("</resources>", '    <string name="zing_page_reader_description">Reads visible text on supported browser pages only after you turn on automatic page reading in Zing Zone.</string>\n</resources>')
           values.write_text(text)

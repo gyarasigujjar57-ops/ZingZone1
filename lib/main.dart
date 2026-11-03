@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io' as io;
@@ -16,6 +17,7 @@ import 'package:firebase_ai/firebase_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 
+const nativeZing = MethodChannel('zingzone/native');
 const navy=Color(0xFF11152B), blue=Color(0xFF4965F5), violet=Color(0xFF7856D9), pink=Color(0xFFEF4F83), muted=Color(0xFF747B8F), line=Color(0xFFE8EAF1), pale=Color(0xFFF6F7FB);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -459,6 +461,41 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     }catch(_){if(mounted)note(context,'दस्तावेज़ पढ़ा नहीं जा सका। साफ़ तस्वीर चुनें।');}
     finally{if(mounted)setState(()=>readingDocument=false);}
   }
+  Future<void> startFloatingAssistant() async {
+    try {
+      final granted = await nativeZing.invokeMethod<bool>('requestOverlayPermission') ?? false;
+      if (!granted) {
+        if (mounted) note(context, 'ऊपर दिखने की अनुमति चालू करके ZingZone में वापस आएँ, फिर Floating Pop दबाएँ।');
+        return;
+      }
+      await nativeZing.invokeMethod<bool>('startOverlay');
+      if (mounted) note(context, 'Floating Zing AI चालू है। इसे स्क्रीन पर खिसका सकते हैं।');
+    } on PlatformException catch (e) {
+      if (mounted) note(context, 'Floating Pop शुरू नहीं हुआ: ${e.message ?? e.code}');
+    }
+  }
+
+  Future<void> enableAutomaticPageReader() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Automatic Page Reader'),
+        content: const Text('अनुमति देने पर ZingZone समर्थित ब्राउज़र में केवल सरकारी .gov.in और .nic.in पेज का दिखाई देने वाला टेक्स्ट पढ़ेगा और उसका विश्लेषण Cloudflare/Gemini को भेजेगा। यह OTP, पासवर्ड, CAPTCHA, भुगतान, लॉगिन, प्रोफ़ाइल और डैशबोर्ड पेज छोड़ देगा। फ़ॉर्म में भरी निजी जानकारी भेजने से बचने के लिए इनपुट बॉक्स का लिखा हुआ मान नहीं पढ़ा जाएगा। आप Android Settings में यह अनुमति कभी भी बंद कर सकते हैं।'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('रद्द करें')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('सहमति और आगे')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await nativeZing.invokeMethod<bool>('enableAutoRead', {'enabled': true});
+      if (mounted) note(context, 'Android Accessibility Settings खुल गई हैं। वहाँ Zing Zone Page Reader को खुद चालू करना होगा।');
+    } on PlatformException catch (e) {
+      if (mounted) note(context, 'Page Reader सेट नहीं हुआ: ${e.message ?? e.code}');
+    }
+  }
+
   Future<void> openDemoForm() async {
     const html = '''<!doctype html><html lang="hi"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Zing Zone Safe Demo Form</title><body style="font:16px Arial;padding:18px;max-width:650px;margin:auto"><h2>डेमो आवेदन फ़ॉर्म</h2><p>यह केवल परीक्षण के लिए नकली जानकारी वाला फ़ॉर्म है। कोई डेटा कहीं जमा नहीं होगा।</p><form onsubmit="event.preventDefault();document.getElementById('result').textContent='डेमो: सबमिट बटन दबाया गया — कोई डेटा भेजा नहीं गया।';"><label for="applicant_name">आवेदक का पूरा नाम</label><input id="applicant_name" name="applicant_name" autocomplete="name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="father_name">पिता का नाम</label><input id="father_name" name="father_name" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="dob">जन्मतिथि</label><input id="dob" name="dob" type="date" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="qualification">शैक्षणिक योग्यता</label><select id="qualification" name="qualification" required style="display:block;width:100%;padding:10px;margin:6px 0 14px"><option value="">चुनें</option><option value="12th">12वीं</option><option value="graduate">स्नातक</option><option value="postgraduate">स्नातकोत्तर</option></select><label for="marks">प्राप्त अंक (0 से 100)</label><input id="marks" name="marks" type="number" min="0" max="100" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label for="email">ईमेल</label><input id="email" name="email" type="email" style="display:block;width:100%;padding:10px;margin:6px 0 14px"><label><input type="checkbox" name="consent"> यह डेमो चेकबॉक्स है (AI इसे नहीं छुएगा)</label><p id="result"></p><button type="submit">डेमो सबमिट (स्थानीय)</button></form></body></html>''';
     setState(() { pageText=''; fields=[]; aiAnswer=''; });
@@ -652,6 +689,10 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('LIVE FORM',style:TextStyle(fontWeight:FontWeight.w900,letterSpacing:1,color:navy,fontSize:16)),Text('चैट के साथ वेबसाइट पर काम करो',style:TextStyle(fontSize:11,color:muted))])),
       TextButton.icon(onPressed:loading||analyzing?null:openDemoForm,icon:const Icon(Icons.science_outlined,size:16),label:const Text('डेमो फ़ॉर्म')),
       IconButton(onPressed:()=>Navigator.of(c).pop(),icon:const Icon(Icons.close),tooltip:'Live form बंद करें')
+    ])),
+    Padding(padding:const EdgeInsets.fromLTRB(12,0,12,6),child:Wrap(spacing:7,runSpacing:5,children:[
+      OutlinedButton.icon(onPressed:startFloatingAssistant,icon:const Icon(Icons.picture_in_picture_alt_outlined,size:17),label:const Text('Floating Pop')),
+      OutlinedButton.icon(onPressed:enableAutomaticPageReader,icon:const Icon(Icons.auto_read_pause_outlined,size:17),label:const Text('Auto Page Reader')),
     ])),
     Padding(padding:const EdgeInsets.symmetric(horizontal:10),child:Row(children:[
       Expanded(child:TextField(controller:urlController,keyboardType:TextInputType.url,autocorrect:false,decoration:const InputDecoration(isDense:true,prefixIcon:Icon(Icons.language),hintText:'आधिकारिक वेबसाइट का HTTPS पता'))),

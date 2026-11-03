@@ -272,7 +272,7 @@ jobs:
               private val worker = Executors.newSingleThreadExecutor()
               private var lastHash = ""
               private var lastSentAt = 0L
-              private val browsers = setOf("com.android.chrome", "com.microsoft.emmx", "org.mozilla.firefox", "com.sec.android.app.sbrowser")
+              private val browsers = setOf("com.android.chrome", "com.microsoft.emmx", "org.mozilla.firefox", "com.sec.android.app.sbrowser", "com.gyarasigujjar57.zingzone")
               override fun onServiceConnected() {
                   serviceInfo = serviceInfo.apply {
                       eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED
@@ -288,7 +288,7 @@ jobs:
                   val root = rootInActiveWindow ?: return
                   val text = StringBuilder()
                   val fields = JSONArray()
-                  var pageUrl = ""
+                  var pageUrl = prefs.getString("flutter.zing_live_current_url", "") ?: ""
                   fun walk(node: AccessibilityNodeInfo?, depth: Int) {
                       if (node == null || depth > 24 || text.length > 18000) return
                       val cls = node.className?.toString() ?: ""
@@ -314,7 +314,8 @@ jobs:
                   val content = text.toString().replace(Regex("\n{3,}"), "\n\n").take(18000)
                   if (pageUrl.isBlank() || content.length < 120) return
                   val host = try { URL(pageUrl).host.lowercase() } catch (_: Exception) { return }
-                  if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return\n                  
+                  if (!(host == "gov.in" || host.endsWith(".gov.in") || host == "nic.in" || host.endsWith(".nic.in"))) return
+                  
                   
                   if (pageUrl.contains("/login", true) || pageUrl.contains("/profile", true) || pageUrl.contains("/dashboard", true) || pageUrl.contains("/payment", true) || pageUrl.contains("/signin", true)) return
                   val lower = content.lowercase()

@@ -515,6 +515,11 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     );
     if (ok != true) return;
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken();
+      if (token == null || token.isEmpty) throw Exception('Firebase sign-in token नहीं मिला।');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('zing_firebase_id_token', token);
       await nativeZing.invokeMethod<bool>('enableAutoRead', {'enabled': true});
       if (mounted) note(context, 'Android Accessibility Settings खुल गई हैं। वहाँ Zing Zone Page Reader को खुद चालू करना होगा।');
     } on PlatformException catch (e) {

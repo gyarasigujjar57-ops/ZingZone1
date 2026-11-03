@@ -19,6 +19,8 @@ dependencies:
   image_picker: ^1.1.2
   image_cropper: ^13.0.0
   google_mlkit_text_recognition: ^0.17.1
+  google_mlkit_selfie_segmentation: ^0.12.1
+  image: ^4.5.4
   webview_flutter: ^4.13.0
 dev_dependencies:
   flutter_test:

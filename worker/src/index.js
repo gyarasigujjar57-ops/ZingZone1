@@ -53,6 +53,24 @@ export default {
       return json({ error: "The latest message must be from the user." }, 400);
     }
 
+    if (body.formVerification !== undefined && body.formVerification !== null) {
+      const request = body.formVerification;
+      if (!request || typeof request !== "object" || !Array.isArray(request.fields) || request.fields.length < 1 || request.fields.length > 160) {
+        return json({ error: "Form verification request is invalid." }, 400);
+      }
+      const checks = request.fields.map((field, index) => {
+        if (!field || typeof field !== "object" || typeof field.label !== "string" || field.label.length > 300 || typeof field.sourceValue !== "string" || field.sourceValue.length > 1000 || typeof field.actualValue !== "string" || field.actualValue.length > 1000) {
+          return { index, status: "NEEDS_REVIEW", reason: "Field data is incomplete or invalid." };
+        }
+        const normalize = value => value.normalize("NFKC").trim().replace(/\\s+/g, " ").toLocaleLowerCase("en-IN");
+        const source = normalize(field.sourceValue);
+        const actual = normalize(field.actualValue);
+        if (!source || !actual) return { label: field.label, status: "NEEDS_REVIEW", reason: "Source or filled value is empty." };
+        return source === actual ? { label: field.label, status: "MATCH", reason: "Filled value matches the supplied source value." } : { label: field.label, status: "MISMATCH", reason: "Filled value differs from the supplied source value." };
+      });
+      const passed = checks.every(check => check.status === "MATCH");
+      return json({ verification: "deterministic_source_value_comparison", passed, requires_review: !passed, checks });
+    }
     if (body.page !== undefined && body.page !== null) {
       const page = body.page;
       if (!page || typeof page !== "object" ||
@@ -61,6 +79,12 @@ export default {
           typeof page.text !== "string" || page.text.trim().length < 1 ||
           page.text.length > 24000) {
         return json({ error: "Page context is invalid or too large." }, 400);
+      }
+      let pageUrl;
+      try { pageUrl = new URL(page.url); } catch { return json({ error: "Page URL is invalid." }, 400); }
+      const host = pageUrl.hostname.toLowerCase();
+      if (pageUrl.protocol !== "https:" || !(host === "gov.in" || host.endsWith(".gov.in") || host === "nic.in" || host.endsWith(".nic.in"))) {
+        return json({ error: "Automatic page analysis is limited to HTTPS .gov.in and .nic.in websites." }, 403);
       }
       const fields = Array.isArray(page.fields) ? page.fields.slice(0, 160) : [];
       const safeFields = fields.map((field) => {

@@ -43,9 +43,9 @@ jobs:
           if "namespace =" not in a:
               a = a.replace("android {", 'android {\n    namespace = "com.gyarasigujjar57.zingzone"', 1)
           a = re.sub(r'applicationId\s*=\s*"[^"]+"', 'applicationId = "com.gyarasigujjar57.zingzone"', a, count=1)
-          # Disable shrinking in the generated release build until all optional ML Kit classes are bundled.
+          # Disable release shrinking until optional OCR runtime classes are verified.
           if "getByName(\"release\") { isMinifyEnabled = false" not in a:
-              a += '\\nandroid { buildTypes { getByName("release") { isMinifyEnabled = false; isShrinkResources = false } } }\\n'
+              a += '\nandroid { buildTypes { getByName("release") { isMinifyEnabled = false; isShrinkResources = false } } }\n'
           app.write_text(a)
           PY
       - name: Configure Devanagari OCR and image cropper Android components

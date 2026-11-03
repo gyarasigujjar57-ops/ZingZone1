@@ -6,6 +6,8 @@ import 'dart:io' as io;
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:google_mlkit_selfie_segmentation/google_mlkit_selfie_segmentation.dart';
+import 'package:image/image.dart' as img;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -418,8 +420,9 @@ class LiveFormPanel extends StatefulWidget {
 class _LiveFormPanelState extends State<LiveFormPanel> {
   final urlController = TextEditingController();
   late final WebViewController web;
-  bool loading=false, analyzing=false, readingDocument=false;
+  bool loading=false, analyzing=false, readingDocument=false, removingBackground=false;
   String pageText='', aiAnswer='', documentText='';
+  Uint8List? preparedPhotoBytes;
   final ImagePicker documentPicker=ImagePicker();
   List<Map<String,dynamic>> fields=[];
   @override void initState() {
@@ -487,6 +490,74 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     }catch(_){if(mounted)note(context,'दस्तावेज़ पढ़ा नहीं जा सका। साफ़ तस्वीर चुनें।');}
     finally{if(mounted)setState(()=>readingDocument=false);}
   }
+  Future<void> removePhotoBackground() async {
+    if (removingBackground) return;
+    try {
+      final picked = await documentPicker.pickImage(source: ImageSource.gallery);
+      if (picked == null || !mounted) return;
+      setState(() => removingBackground = true);
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        maxWidth: 1200,
+        maxHeight: 1600,
+        compressFormat: ImageCompressFormat.jpg,
+        compressQuality: 92,
+        uiSettings: [AndroidUiSettings(
+          toolbarTitle: 'फोटो काटें',
+          toolbarColor: Colors.white,
+          toolbarWidgetColor: navy,
+          initAspectRatio: CropAspectRatioPreset.original,
+          lockAspectRatio: false,
+        )],
+      );
+      if (cropped == null || !mounted) return;
+      final segmenter = SelfieSegmenter(mode: SegmenterMode.single, enableRawSizeMask: true);
+      try {
+        final mask = await segmenter.processImage(InputImage.fromFilePath(cropped.path));
+        if (mask == null) throw Exception('व्यक्ति की पहचान नहीं हुई');
+        final source = img.decodeImage(await io.File(cropped.path).readAsBytes());
+        if (source == null) throw Exception('फोटो पढ़ी नहीं जा सकी');
+        final output = img.Image(width: source.width, height: source.height, numChannels: 4);
+        for (var y = 0; y < source.height; y++) {
+          final my = (y * mask.height / source.height).floor().clamp(0, mask.height - 1);
+          for (var x = 0; x < source.width; x++) {
+            final mx = (x * mask.width / source.width).floor().clamp(0, mask.width - 1);
+            final confidence = mask.confidences[my * mask.width + mx].clamp(0.0, 1.0);
+            final alpha = confidence < 0.35 ? 0 : confidence > 0.78 ? 255 : ((confidence - 0.35) / 0.43 * 255).round();
+            final p = source.getPixel(x, y);
+            output.setPixelRgba(x, y, p.r.toInt(), p.g.toInt(), p.b.toInt(), alpha);
+          }
+        }
+        final png = Uint8List.fromList(img.encodePng(output));
+        if (!mounted) return;
+        setState(() => preparedPhotoBytes = png);
+        note(context, 'बैकग्राउंड हटाने का ड्राफ्ट तैयार है। किनारों और चेहरे को जाँचें; सरकारी फोटो नियम अलग से मिलाएँ।');
+      } finally {
+        await segmenter.close();
+      }
+    } catch (_) {
+      if (mounted) note(context, 'बैकग्राउंड नहीं हट पाया। साफ़, सामने से ली गई व्यक्ति की फोटो चुनें।');
+    } finally {
+      if (mounted) setState(() => removingBackground = false);
+    }
+  }
+
+  Future<void> previewPreparedPhoto() async {
+    final bytes = preparedPhotoBytes;
+    if (bytes == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('बैकग्राउंड हटाई गई फोटो'),
+        content: SizedBox(
+          width: 280,
+          child: Image.memory(bytes, fit: BoxFit.contain),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('बंद करें'))],
+      ),
+    );
+  }
+
   Future<void> startFloatingAssistant() async {
     try {
       final granted = await nativeZing.invokeMethod<bool>('requestOverlayPermission') ?? false;
@@ -789,6 +860,9 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     ])),
     Padding(padding:const EdgeInsets.symmetric(horizontal:12,vertical:4),child:Row(children:[
       OutlinedButton.icon(onPressed:readingDocument?null:readDocument,icon:const Icon(Icons.document_scanner_outlined),label:Text(readingDocument?'दस्तावेज़ पढ़ रहे हैं…':'दस्तावेज़ से टेक्स्ट निकालें')),
+      const SizedBox(width:6),
+      OutlinedButton.icon(onPressed:removingBackground?null:removePhotoBackground,icon:const Icon(Icons.person_remove_alt_1_outlined),label:Text(removingBackground?'बैकग्राउंड हट रहा है…':'फोटो बैकग्राउंड हटाएँ')),
+      if(preparedPhotoBytes!=null) TextButton.icon(onPressed:previewPreparedPhoto,icon:const Icon(Icons.visibility_outlined),label:const Text('फोटो देखें')),
       const SizedBox(width:8),
       if(documentText.isNotEmpty)const Expanded(child:Text('टेक्स्ट मिला • AI को भेजने से पहले जाँचें',style:TextStyle(fontSize:10,color:muted)))
     ])),

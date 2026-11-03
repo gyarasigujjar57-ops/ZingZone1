@@ -175,6 +175,8 @@ jobs:
               private lateinit var panel: LinearLayout
               private lateinit var answer: TextView
               private var expanded = false
+              private var panelWidth = 300
+              private var panelHeight = 280
               private val handler = Handler(Looper.getMainLooper())
               private val refresh = object : Runnable {
                   override fun run() {
@@ -217,8 +219,10 @@ jobs:
                   val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                   val title = TextView(this).apply { text = "ZING AI  ·  LIVE PAGE"; textSize = 13f; setTextColor(Color.rgb(24, 34, 65)); setTypeface(null, 1) }
                   title.setOnTouchListener(DragTouch(false))
+                  val smaller = TextView(this).apply { text = "−"; textSize = 20f; setTextColor(Color.DKGRAY); setPadding(dp(6), 0, dp(6), 0); setOnClickListener { resizePanel(-1) } }
+                  val larger = TextView(this).apply { text = "+"; textSize = 20f; setTextColor(Color.DKGRAY); setPadding(dp(6), 0, dp(6), 0); setOnClickListener { resizePanel(1) } }
                   val minimize = TextView(this).apply { text = " — "; textSize = 22f; setTextColor(Color.DKGRAY); setOnClickListener { toggle() } }
-                  header.addView(title, LinearLayout.LayoutParams(0, dp(42), 1f)); header.addView(minimize)
+                  header.addView(title, LinearLayout.LayoutParams(0, dp(42), 1f)); header.addView(smaller); header.addView(larger); header.addView(minimize)
                   answer = TextView(this).apply { text = "सरकारी वेबसाइट खोलें। अनुमति मिलने पर AI पेज पढ़कर यहाँ समझाएगा।"; textSize = 13f; setTextColor(Color.rgb(35, 43, 66)); setPadding(0, dp(8), 0, dp(8)) }
                   panel.addView(header); panel.addView(answer)
                   root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(bubble) }
@@ -230,9 +234,17 @@ jobs:
                   expanded = !expanded
                   root.removeAllViews()
                   if (expanded) {
-                      root.addView(panel, LinearLayout.LayoutParams(dp(300), dp(280)))
+                      root.addView(panel, LinearLayout.LayoutParams(dp(panelWidth), dp(panelHeight)))
                   } else root.addView(bubble)
                   try { wm.updateViewLayout(root, params) } catch (_: Exception) {}
+              }
+              private fun resizePanel(delta: Int) {
+                  panelWidth = (panelWidth + delta * 40).coerceIn(240, 380)
+                  panelHeight = (panelHeight + delta * 40).coerceIn(220, 520)
+                  if (expanded) {
+                      panel.layoutParams = LinearLayout.LayoutParams(dp(panelWidth), dp(panelHeight))
+                      try { wm.updateViewLayout(root, params) } catch (_: Exception) {}
+                  }
               }
               private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
               private inner class DragTouch(private val toggleOnTap: Boolean) : View.OnTouchListener {

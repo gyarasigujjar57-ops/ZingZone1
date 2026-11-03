@@ -421,7 +421,14 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (_) { if(mounted) setState(() {loading=true;fields=[];pageText='';}); },
-        onPageFinished: (url) { SharedPreferences.getInstance().then((prefs)=>prefs.setString('zing_live_current_url',url)); if(mounted) setState(() {loading=false;urlController.text=url;}); },
+        onPageFinished: (url) {
+          SharedPreferences.getInstance().then((prefs)=>prefs.setString('zing_live_current_url',url));
+          if(mounted) setState(() {loading=false;urlController.text=url;});
+          // Automatically inspect each loaded page; no separate "Read page" tap is needed.
+          Future.delayed(const Duration(milliseconds:900), () {
+            if(mounted) inspect();
+          });
+        },
       ))
       ..addJavaScriptChannel('ZingLiveForm',onMessageReceived:(message) {
         try {

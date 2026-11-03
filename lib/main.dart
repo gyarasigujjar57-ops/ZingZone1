@@ -943,7 +943,22 @@ class ChatMemory {
 
   static Future<List<String>> loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_historyKey) ?? <String>[];
+    final local = prefs.getStringList(_historyKey) ?? <String>[];
+    final user = Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chats').orderBy('createdAt', descending: true).limit(50).get();
+        final remote = snapshot.docs.map((doc) => doc.data()['content'])
+            .whereType<String>().where((value) => value.trim().isNotEmpty).toList();
+        if (remote.isNotEmpty) {
+          final merged = <String>[...remote, ...local.where((item) => !remote.contains(item))].take(50).toList();
+          await prefs.setStringList(_historyKey, merged);
+          return merged;
+        }
+      } catch (_) {}
+    }
+    return local;
   }
 
   static Future<List<String>> loadDrafts() async {

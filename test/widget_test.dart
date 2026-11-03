@@ -18,9 +18,9 @@ void main() {
 
     // Assert the actual tab page widgets instead of relying on navigation
     // label rendering, which can vary with Flutter's label behavior.
-    expect(find.byType(ChatPage), findsOneWidget);
-    expect(find.byType(StorePage), findsOneWidget);
-    expect(find.byType(RewardsPage), findsOneWidget);
-    expect(find.byType(ProfilePage), findsOneWidget);
+    expect(find.byType(ChatPage, skipOffstage: false), findsOneWidget);
+    expect(find.byType(StorePage, skipOffstage: false), findsOneWidget);
+    expect(find.byType(RewardsPage, skipOffstage: false), findsOneWidget);
+    expect(find.byType(ProfilePage, skipOffstage: false), findsOneWidget);
   });
 }

@@ -39,6 +39,6 @@ test("blocks low-confidence OCR and mismatched select options", () => {
 
 test("blocks missing source evidence and malformed requests", () => {
   const missing = evaluateFormConfidence([{ ...trustedField, evidence: [] }]);
-  assert.equal(missing.results[0].decision, "NEEDS_USER");
+  assert.equal(missing.results[0].decision, "BLOCK");
   assert.ok(evaluateFormConfidence([]).error);
 });

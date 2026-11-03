@@ -134,7 +134,7 @@ jobs:
                           "startOverlay" -> {
                               if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) result.error("NO_OVERLAY_PERMISSION", "Overlay permission is not enabled", null)
                               else {
-                                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(Intent(this, ZingOverlayService::class.java))
+                                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startService(Intent(this, ZingOverlayService::class.java))
                                   else startService(Intent(this, ZingOverlayService::class.java))
                                   result.success(true)
                               }

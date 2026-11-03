@@ -273,12 +273,13 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
       final text=await _ocrImagePath(file.path);
       if(!mounted)return;
       final confirmed=await _reviewOcr(file.name,text);
-      if(!mounted)return;
+      if(!mounted||confirmed.isEmpty)return;
       setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed; });
     }else{
       final picked=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf'],withData:true);
       if(picked==null||picked.files.isEmpty||!mounted)return;
       final file=picked.files.single;
+      if(file.size>20*1024*1024)throw Exception('PDF 20 MB से छोटा रखें।');
       final bytes=file.bytes;
       if(bytes==null)throw Exception('PDF bytes unavailable');
       setState(()=>sending=true);

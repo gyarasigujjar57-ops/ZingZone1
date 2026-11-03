@@ -1,3 +1,53 @@
+const rateBuckets = new Map();
+const PROJECT_ID = "zingzone-78bc8";
+let jwksCache = { keys: null, expiresAt: 0 };
+
+function decodeBase64Url(value) {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4);
+  return Uint8Array.from(atob(padded), ch => ch.charCodeAt(0));
+}
+async function verifyFirebaseToken(request) {
+  const auth = request.headers.get("Authorization") || "";
+  const match = auth.match(/^Bearer ([A-Za-z0-9._-]+)$/);
+  if (!match) return null;
+  const parts = match[1].split(".");
+  if (parts.length !== 3) return null;
+  let header, claims;
+  try {
+    header = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0])));
+    claims = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1])));
+  } catch { return null; }
+  if (header.alg !== "RS256" || typeof header.kid !== "string") return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (claims.iss !== "https://securetoken.google.com/" + PROJECT_ID ||
+      claims.aud !== PROJECT_ID || typeof claims.sub !== "string" || !claims.sub ||
+      !Number.isFinite(claims.exp) || claims.exp <= now ||
+      !Number.isFinite(claims.iat) || claims.iat > now + 300 ||
+      !Number.isFinite(claims.auth_time) || claims.auth_time > now + 300) return null;
+  try {
+    if (!jwksCache.keys || jwksCache.expiresAt <= Date.now()) {
+      const response = await fetch("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com");
+      if (!response.ok) return null;
+      const data = await response.json();
+      jwksCache = { keys: data.keys || [], expiresAt: Date.now() + 3600000 };
+    }
+    const jwk = jwksCache.keys.find(key => key.kid === header.kid && key.alg === "RS256");
+    if (!jwk) { jwksCache.expiresAt = 0; return null; }
+    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    const valid = await crypto.subtle.verify({ name: "RSASSA-PKCS1-v1_5" }, key, decodeBase64Url(parts[2]), new TextEncoder().encode(parts[0] + "." + parts[1]));
+    return valid ? claims : null;
+  } catch { return null; }
+}
+function withinBestEffortLimit(key, now) {
+  const previous = rateBuckets.get(key) || [];
+  const recent = previous.filter(timestamp => now - timestamp < 60000);
+  if (recent.length >= 20) return false;
+  recent.push(now);
+  rateBuckets.set(key, recent);
+  if (rateBuckets.size > 5000) rateBuckets.clear();
+  return true;
+}
+
 export default {
   async fetch(request, env) {
     const cors = {
@@ -23,6 +73,11 @@ export default {
       });
     }
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+    const identity = await verifyFirebaseToken(request);
+    if (!identity) return json({ error: "Valid Firebase sign-in is required." }, 401);
+    // Per-isolate best-effort guard only; configure Cloudflare global rate limiting before public launch.
+    const now = Date.now();
+    if (!withinBestEffortLimit(identity.sub, now)) return json({ error: "Request limit reached. Please wait one minute." }, 429);
     if (!env.GEMINI_API_KEY) return json({ error: "AI server is not configured." }, 503);
 
     let body;

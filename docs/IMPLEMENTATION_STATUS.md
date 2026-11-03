@@ -1,6 +1,6 @@
 # Zing Zone implementation status
 
-Last checked: 2026-11-02
+Last checked: 2026-11-03
 
 ## Verified infrastructure
 - GitHub repository: `gyarasigujjar57-ops/ZingZone1`.
@@ -15,14 +15,14 @@ Last checked: 2026-11-02
 - Text chat sends requests to the Cloudflare Worker by default and retains Firebase fallback code.
 - Chat image selection sends image data to the Worker; backend image OCR has passed a synthetic test. Reading real user documents on the Android app still needs device testing.
 - AI draft suggestions for Live Form call the Cloudflare Worker.
-- The Live Form panel opens HTTPS pages in an in-app WebView, reads visible page text and ordinary form controls, and supports user-reviewed filling of normal text/select/textarea fields.
+- The Live Form panel opens HTTPS pages in an in-app WebView, reads visible page text and ordinary form controls, and supports user-reviewed filling of normal text/select/textarea fields.\n- Android overlay and opt-in Accessibility page-reader services are generated in the APK workflow. They are not yet confirmed working on a physical phone; browser accessibility trees can omit content and cannot guarantee every page is readable.\n- The overlay is a draggable bubble with an expandable/minimizable panel. Resizing to arbitrary sizes and robust foreground-service behaviour remain to be tested.\n- Automatic page reading is scoped to supported browsers and HTTPS `.gov.in` / `.nic.in` hosts. It skips common login/profile/dashboard/payment/OTP/CAPTCHA patterns, but this is not a substitute for device-level privacy testing.\n- Worker now has deterministic exact-value comparison for supplied source values (`formVerification`). It does not prove semantic correctness of a field mapping or verify official eligibility rules.
 - Chat history and drafts are stored locally on the device; cloud sync is not verified.
-- PDF document selection/OCR is not implemented yet.
+- PDF document selection/OCR is not implemented yet.\n- `docs/INDIA_FORMS_KNOWLEDGE_BASE.md` defines a source-backed catalogue schema; the actual all-India catalogue is not populated.\n- Full document-to-field matching, independent semantic verification, portal-specific adapters, and coverage reporting are not implemented yet.
 - Store, Rewards, Wallet and Premium are not verified live financial services; treat them as prototype/demo UI until separate payment and ledger tests pass.
 
 ## CI status
 - A previous APK workflow run (#115) passed, but it predates the latest form and image changes.
-- The latest APK build after these changes is still running; wait for its final conclusion before treating the APK as buildable.
+- Latest Android overlay build attempt failed at release resource linking and Kotlin compilation. A correction was pushed; the replacement build must pass before distributing an APK.
 - Live Worker health, text response and synthetic image OCR tests passed on 2026-11-02.
 - No real Android-device test has been performed from this workflow.
 

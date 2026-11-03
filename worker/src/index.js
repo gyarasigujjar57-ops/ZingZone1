@@ -1,4 +1,5 @@
 import { resolvePortalAdapter } from './portal_adapters.js';
+import { evaluateFormConfidence } from './form_confidence.js';
 const rateBuckets = new Map();
 const PROJECT_ID = "zingzone-78bc8";
 let jwksCache = { keys: null, expiresAt: 0 };
@@ -111,6 +112,12 @@ export default {
     while (contents.length && contents[0].role !== "user") contents.shift();
     if (!contents.length || contents[contents.length - 1].role !== "user") {
       return json({ error: "The latest message must be from the user." }, 400);
+    }
+
+    if (body.formConfidence !== undefined && body.formConfidence !== null) {
+      const result = evaluateFormConfidence(body.formConfidence.fields);
+      if (result.error) return json({ error: result.error }, 400);
+      return json({ formConfidence: result });
     }
 
     if (body.formVerification !== undefined && body.formVerification !== null) {

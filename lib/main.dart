@@ -908,8 +908,37 @@ class _PortalAssistPageState extends State<PortalAssistPage> {
 class ChatMemory {
   static const _historyKey = 'zz_chat_history_v1';
   static const _currentKey = 'zz_current_chat_v1';
-  static Future<String> loadCurrent() async { final p=await SharedPreferences.getInstance(); return p.getString(_currentKey) ?? ''; }
-  static Future<void> saveCurrent(String value) async { final p=await SharedPreferences.getInstance(); await p.setString(_currentKey,value); }
+  static Future<String> loadCurrent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final local = prefs.getString(_currentKey) ?? '';
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chatHistory').doc('current').get();
+        final remote = doc.data()?['content'];
+        if (remote is String && remote.isNotEmpty) {
+          await prefs.setString(_currentKey, remote);
+          return remote;
+        }
+      } catch (_) {}
+    }
+    return local;
+  }
+  static Future<void> saveCurrent(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_currentKey, value);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chatHistory').doc('current').set({
+          'content': value,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    }
+  }
   static const _draftsKey = 'zz_chat_drafts_v1';
 
   static Future<List<String>> loadHistory() async {
@@ -929,6 +958,16 @@ class ChatMemory {
     final history = prefs.getStringList(_historyKey) ?? <String>[];
     history.insert(0, value);
     await prefs.setStringList(_historyKey, history.take(50).toList());
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid)
+            .collection('chatHistory').add({
+          'content': value,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
   }
 
   static Future<void> saveDraft(String draft) async {

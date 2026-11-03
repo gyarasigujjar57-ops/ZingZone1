@@ -51,9 +51,15 @@ jobs:
           from pathlib import Path
           gradle = Path("android/app/build.gradle.kts")
           text = gradle.read_text()
-          dependency = '    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")'
-          if dependency not in text:
-              text = text.replace("dependencies {", "dependencies {\n" + dependency, 1)
+          dependencies = [
+              '    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")',
+              '    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")',
+              '    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")',
+              '    implementation("com.google.mlkit:text-recognition-korean:16.0.1")',
+          ]
+          for dependency in dependencies:
+              if dependency.strip() not in text:
+                  text = text.replace("dependencies {", "dependencies {\n" + dependency, 1)
           gradle.write_text(text)
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           xml = manifest.read_text()

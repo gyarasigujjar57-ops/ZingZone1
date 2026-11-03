@@ -94,7 +94,16 @@ export default {
           const value = field[key];
           if (typeof value === "string") clean[key] = value.slice(0, 500);
           else if (typeof value === "boolean") clean[key] = value;
-          else if (Array.isArray(value)) clean[key] = value.filter(v => typeof v === "string").slice(0, 40).map(v => v.slice(0, 200));
+          else if (Array.isArray(value)) clean[key] = value.slice(0, 40).map((v) => {
+            if (typeof v === "string") return v.slice(0, 200);
+            if (key === "options" && v && typeof v === "object") {
+              const label = typeof v.text === "string" ? v.text.slice(0, 160) : "";
+              const optionValue = typeof v.value === "string" ? v.value.slice(0, 100) : "";
+              const disabled = v.disabled === true ? " (disabled)" : "";
+              return label ? label + (optionValue ? " [value: " + optionValue + "]" : "") + disabled : "";
+            }
+            return "";
+          }).filter(Boolean);
         }
         return clean;
       }).filter(Boolean);

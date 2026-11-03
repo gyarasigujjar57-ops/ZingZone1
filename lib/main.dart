@@ -692,7 +692,7 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
     ])),
     Padding(padding:const EdgeInsets.fromLTRB(12,0,12,6),child:Wrap(spacing:7,runSpacing:5,children:[
       OutlinedButton.icon(onPressed:startFloatingAssistant,icon:const Icon(Icons.picture_in_picture_alt_outlined,size:17),label:const Text('Floating Pop')),
-      OutlinedButton.icon(onPressed:enableAutomaticPageReader,icon:const Icon(Icons.auto_read_pause_outlined,size:17),label:const Text('Auto Page Reader')),
+      OutlinedButton.icon(onPressed:enableAutomaticPageReader,icon:const Icon(Icons.chrome_reader_mode_outlined,size:17),label:const Text('Auto Page Reader')),
     ])),
     Padding(padding:const EdgeInsets.symmetric(horizontal:10),child:Row(children:[
       Expanded(child:TextField(controller:urlController,keyboardType:TextInputType.url,autocorrect:false,decoration:const InputDecoration(isDense:true,prefixIcon:Icon(Icons.language),hintText:'आधिकारिक वेबसाइट का HTTPS पता'))),

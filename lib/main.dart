@@ -465,31 +465,61 @@ class _LiveFormPanelState extends State<LiveFormPanel> {
   }
   @override void dispose(){urlController.dispose();super.dispose();}
   Future<void> readDocument() async {
-    if(readingDocument)return;
+    if (readingDocument) return;
     try {
-      final picked=await documentPicker.pickImage(source:ImageSource.gallery);
-      if(picked==null||!mounted)return;
-      setState(()=>readingDocument=true);
-      final cropped=await ImageCropper().cropImage(
-        sourcePath:picked.path,maxWidth:1800,maxHeight:2400,
-        compressFormat:ImageCompressFormat.jpg,compressQuality:90,
-        uiSettings:[AndroidUiSettings(toolbarTitle:'दस्तावेज़ सीधा करें',toolbarColor:Colors.white,toolbarWidgetColor:navy,initAspectRatio:CropAspectRatioPreset.original,lockAspectRatio:false)],
-      );
-      if(cropped==null||!mounted)return;
-      final image=InputImage.fromFilePath(cropped.path);
-      final latin=TextRecognizer(script:TextRecognitionScript.latin);
-      final devanagari=TextRecognizer(script:TextRecognitionScript.devanagiri);
-      String latinText='', devanagariText='';
-      try { latinText=(await latin.processImage(image)).text; } finally { await latin.close(); }
-      try { devanagariText=(await devanagari.processImage(image)).text; } finally { await devanagari.close(); }
-      final combined=[if(devanagariText.trim().isNotEmpty)'देवनागरी:\\n'+devanagariText.trim(),if(latinText.trim().isNotEmpty)'Latin/अंक:\\n'+latinText.trim()].join('\\n\\n');
-      if(!mounted)return;
-      setState(()=>documentText=combined.length>6500?combined.substring(0,6500):combined);
-      if(documentText.trim().isEmpty)note(context,'इस तस्वीर से साफ़ टेक्स्ट नहीं मिला। साफ़ फोटो लेकर दोबारा कोशिश करें।');
-      else note(context,'दस्तावेज़ का टेक्स्ट फ़ोन पर निकाला गया। AI को भेजने से पहले उसे जाँचें।');
-    }catch(_){if(mounted)note(context,'दस्तावेज़ पढ़ा नहीं जा सका। साफ़ तस्वीर चुनें।');}
-    finally{if(mounted)setState(()=>readingDocument=false);}
+      final picked = await documentPicker.pickMultiImage();
+      if (picked.isEmpty || !mounted) return;
+      final selected = picked.take(5).toList();
+      setState(() => readingDocument = true);
+      final latin = TextRecognizer(script: TextRecognitionScript.latin);
+      final devanagari = TextRecognizer(script: TextRecognitionScript.devanagiri);
+      final results = <String>[];
+      try {
+        for (var i = 0; i < selected.length; i++) {
+          if (!mounted) return;
+          final cropped = await ImageCropper().cropImage(
+            sourcePath: selected[i].path,
+            maxWidth: 1800,
+            maxHeight: 2400,
+            compressFormat: ImageCompressFormat.jpg,
+            compressQuality: 90,
+            uiSettings: [AndroidUiSettings(
+              toolbarTitle: 'दस्तावेज़ ${i + 1} सीधा करें',
+              toolbarColor: Colors.white,
+              toolbarWidgetColor: navy,
+              initAspectRatio: CropAspectRatioPreset.original,
+              lockAspectRatio: false,
+            )],
+          );
+          if (cropped == null) continue;
+          final image = InputImage.fromFilePath(cropped.path);
+          final latinText = (await latin.processImage(image)).text.trim();
+          final devanagariText = (await devanagari.processImage(image)).text.trim();
+          final parts = <String>[
+            if (devanagariText.isNotEmpty) 'देवनागरी:\\n' + devanagariText,
+            if (latinText.isNotEmpty) 'Latin/अंक:\\n' + latinText,
+          ];
+          results.add('===== दस्तावेज़ ${i + 1} (अलग स्रोत) =====\\n' + (parts.isEmpty ? 'कोई साफ़ टेक्स्ट नहीं मिला।' : parts.join('\\n\\n')));
+        }
+      } finally {
+        await latin.close();
+        await devanagari.close();
+      }
+      if (!mounted) return;
+      final combined = results.join('\\n\\n');
+      setState(() => documentText = combined.length > 18000 ? combined.substring(0, 18000) : combined);
+      if (documentText.trim().isEmpty) {
+        note(context, 'चुनी गई तस्वीरों से साफ़ टेक्स्ट नहीं मिला। साफ़ और सीधी तस्वीरें चुनें।');
+      } else {
+        note(context, '${results.length} दस्तावेज़ों का टेक्स्ट फ़ोन पर निकला। हर दस्तावेज़ का नाम/मालिक खुद जाँचें; AI को भेजने से पहले सुधारें।');
+      }
+    } catch (_) {
+      if (mounted) note(context, 'दस्तावेज़ पढ़े नहीं जा सके। साफ़ तस्वीरें चुनकर दोबारा कोशिश करें।');
+    } finally {
+      if (mounted) setState(() => readingDocument = false);
+    }
   }
+
   Future<void> removePhotoBackground() async {
     if (removingBackground) return;
     try {

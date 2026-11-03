@@ -380,6 +380,8 @@ jobs:
                   
                   if (pageUrl.contains("/login", true) || pageUrl.contains("/profile", true) || pageUrl.contains("/dashboard", true) || pageUrl.contains("/payment", true) || pageUrl.contains("/signin", true)) return
                   val lower = content.lowercase()
+                  val firebaseToken = prefs.getString("flutter.zing_firebase_id_token", null)
+                  if (firebaseToken.isNullOrBlank()) return
                   if (lower.contains("enter otp") || lower.contains("one time password") || lower.contains("captcha code") || lower.contains("upi pin") || lower.contains("card number") || lower.contains("payment gateway")) return
                   val hash = MessageDigest.getInstance("SHA-256").digest((pageUrl + content).toByteArray()).joinToString("") { "%02x".format(it) }
                   val now = System.currentTimeMillis()
@@ -393,6 +395,7 @@ jobs:
                           val conn = (URL("https://zing-zone-ai.gyarasigujjar57.workers.dev").openConnection() as HttpURLConnection)
                           conn.requestMethod = "POST"; conn.connectTimeout = 15000; conn.readTimeout = 35000
                           conn.setRequestProperty("Content-Type", "application/json")
+                          conn.setRequestProperty("Authorization", "Bearer " + firebaseToken)
                           conn.doOutput = true
                           conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
                           val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream

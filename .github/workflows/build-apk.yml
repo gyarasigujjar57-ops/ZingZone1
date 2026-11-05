@@ -86,7 +86,7 @@ jobs:
           echo "Worker POST response body:"
           cat worker-response.json
           test "$code" = "200"
-          python3 -c 'import json; d=json.load(open("worker-response.json")); a=d.get("answer",""); assert isinstance(a,str) and len(a.strip())>=20, d; print("Live Worker AI reply received:", a[:500])'
+          python3 -c 'import json; d=json.load(open("worker-response.json")); a=d.get("answer",""); assert isinstance(a,str) and len(a.strip())>=20, d; assert any(x in a.lower() for x in ["किस", "कौन", "भर्ती", "recruitment", "which", "कृपया", "बताइए", "बताएं"]) or "?" in a or "？" in a, "Expected a natural clarifying question for vague army-form request: "+a; print("Live conversational intake reply received:", a[:500])'
       - name: Build release APK
         run: |
           for attempt in 1 2 3; do

@@ -71,6 +71,8 @@ jobs:
         run: |
           cd android
           ./gradlew signingReport
+      - name: Test deterministic Worker intake engine
+        run: node --test worker/test/*.test.js
       - name: Smoke test live Zing Zone AI Worker (Step 1)
         run: |
           set -euo pipefail

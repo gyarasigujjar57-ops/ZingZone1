@@ -47,7 +47,7 @@ export default {
             const answer = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
             if (answer) {
               const userText = messages.filter(m => m.role === "user").map(m => m.text).join("\n");
-              const intake = analyzeIntake({ text: userText });
+              const intake = analyzeIntake({ text: userText, noticeText: typeof body.noticeText === "string" ? body.noticeText.slice(0, 100000) : "", documents: Array.isArray(body.documents) ? body.documents.slice(0, 20).filter(d => d && typeof d.text === "string").map(d => ({ name: String(d.name || "दस्तावेज़").slice(0, 120), text: d.text.slice(0, 30000) })) : [], candidate: body.candidate && typeof body.candidate === "object" ? body.candidate : {} });
               return Response.json({ answer, model, intake }, { headers: cors });
             }
             lastMessage = "Gemini returned no answer";

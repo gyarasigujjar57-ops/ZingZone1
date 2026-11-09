@@ -8,11 +8,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if owns(uid);
       allow create: if owns(uid)
-        && request.resource.data.keys().hasOnly(['displayName', 'photoURL', 'language', 'createdAt', 'updatedAt'])
-        && request.resource.data.keys().hasAll(['createdAt', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['displayName', 'photoURL', 'language', 'state', 'district', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['updatedAt']);
       allow update: if owns(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['displayName', 'photoURL', 'language', 'updatedAt']);
+          .hasOnly(['displayName', 'photoURL', 'language', 'state', 'district', 'updatedAt']);
       allow delete: if false;
 
       match /chats/{chatId} {

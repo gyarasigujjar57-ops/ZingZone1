@@ -259,24 +259,82 @@ class _PhoneOtpState extends State<PhoneOtp>{final code=TextEditingController();
 class Shell extends StatefulWidget{const Shell({super.key});@override State<Shell> createState()=>_ShellState();}
 class _ShellState extends State<Shell>{int tab=0;@override Widget build(BuildContext c)=>Scaffold(body:Column(children:[if(Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser==null)Container(width:double.infinity,padding:const EdgeInsets.symmetric(horizontal:16,vertical:8),color:const Color(0xFFEFF4FF),child:const Row(children:[Icon(Icons.explore_outlined,size:16,color:blue),SizedBox(width:8),Expanded(child:Text('GUEST MODE • Explore and test without signing in',style:TextStyle(color:blue,fontSize:11,fontWeight:FontWeight.w800)))])),Expanded(child:IndexedStack(index:tab,children:const[ChatPage(),StorePage(),RewardsPage(),ProfilePage()]))]),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.chat_bubble_outline),selectedIcon:Icon(Icons.chat_bubble),label:'AI Chat'),NavigationDestination(icon:Icon(Icons.shopping_bag_outlined),selectedIcon:Icon(Icons.shopping_bag),label:'Store'),NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),selectedIcon:Icon(Icons.card_giftcard),label:'Rewards'),NavigationDestination(icon:Icon(Icons.person_outline),selectedIcon:Icon(Icons.person),label:'Profile')]));}
 class ChatPage extends StatefulWidget{const ChatPage({super.key});@override State<ChatPage> createState()=>_ChatPageState();}
-class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;String? pendingOcrText;bool sending=false;@override void initState(){super.initState();_restoreConversation();}Future<void> _restoreConversation() async {final saved=await ChatMemory.loadCurrent();if(!mounted||saved.isEmpty)return;try{final decoded=jsonDecode(saved) as List<dynamic>;setState((){msgs..clear()..addAll(decoded.map((x)=>(x as List<dynamic>).map((v)=>v.toString()).toList()));});}catch(_){}}Future<void> _persistConversation() async {await ChatMemory.saveCurrent(jsonEncode(msgs));}@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if((s.isEmpty&&attachedImage==null&&pendingOcrText==null)||sending)return;final ocr=pendingOcrText;final userText=(s.isEmpty?'इस दस्तावेज़ को पढ़ो और समझाओ।':s)+(ocr==null?'':'\n\nयूज़र द्वारा पुष्टि की गई दस्तावेज़ OCR जानकारी (केवल पढ़ा गया टेक्स्ट, सत्यापन नहीं):\n'+ocr);setState(() { msgs.add(['user',userText]); sending=true; attachedImage=null; attachedImageName=null; pendingOcrText=null; });input.clear();await _persistConversation();try{final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();String? answer;final prefs=await SharedPreferences.getInstance();final workerUrl=(prefs.getString('zing_ai_worker_url')??defaultZingWorkerUrl).trim();
-final uri=Uri.tryParse(workerUrl);
-if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('worker-url-invalid');
-final client=io.HttpClient()..connectionTimeout=const Duration(seconds:25);
-try{
-  final req=await client.postUrl(uri);
-  req.headers.contentType=io.ContentType.json;
-  req.write(jsonEncode({'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList()}));
-  final res=await req.close().timeout(const Duration(seconds:40));
-  final body=await res.transform(utf8.decoder).join();
-  final decoded=jsonDecode(body);
-  if(res.statusCode<200||res.statusCode>=300){
-    final detail=(decoded is Map?decoded['error']:null)?.toString();
-    throw Exception(detail??'worker-http-${res.statusCode}');
+class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;String? pendingOcrText;bool sending=false;@override void initState(){super.initState();_restoreConversation();}Future<void> _restoreConversation() async {final saved=await ChatMemory.loadCurrent();if(!mounted||saved.isEmpty)return;try{final decoded=jsonDecode(saved) as List<dynamic>;setState((){msgs..clear()..addAll(decoded.map((x)=>(x as List<dynamic>).map((v)=>v.toString()).toList()));});}catch(_){}}Future<void> _persistConversation() async {await ChatMemory.saveCurrent(jsonEncode(msgs));}@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {
+  final prompt=(preset??input.text).trim();
+  final imageBytes=attachedImage;
+  final imageName=attachedImageName;
+  final ocr=pendingOcrText;
+  if((prompt.isEmpty&&imageBytes==null&&ocr==null)||sending)return;
+
+  final userText=(prompt.isEmpty?'इस दस्तावेज़/तस्वीर को पढ़कर समझाओ।':prompt)+
+      (ocr==null?'':'\n\nयूज़र द्वारा पुष्टि की गई OCR जानकारी (केवल पढ़ा गया टेक्स्ट, सत्यापन नहीं):\n'+ocr);
+  setState(() {
+    msgs.add(['user',userText]);
+    sending=true;
+    attachedImage=null;
+    attachedImageName=null;
+    pendingOcrText=null;
+  });
+  input.clear();
+  await _persistConversation();
+
+  try {
+    final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();
+    final prefs=await SharedPreferences.getInstance();
+    final workerUrl=(prefs.getString('zing_ai_worker_url')??defaultZingWorkerUrl).trim();
+    final uri=Uri.tryParse(workerUrl);
+    if(uri==null||uri.scheme!='https'||uri.host.isEmpty) {
+      throw Exception('सुरक्षित HTTPS AI server URL उपलब्ध नहीं है।');
+    }
+
+    final payload=<String,dynamic>{
+      'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList(),
+      'language':prefs.getString('zing_language')??'auto',
+    };
+    if(imageBytes!=null) {
+      if(imageBytes.length>5*1024*1024) {
+        throw Exception('तस्वीर 5 MB से बड़ी है। कृपया छोटी JPG/PNG तस्वीर चुनें।');
+      }
+      final ext=(imageName??'').toLowerCase().split('.').last;
+      final mimeType=ext=='png'?'image/png':ext=='webp'?'image/webp':'image/jpeg';
+      payload['image']={'mimeType':mimeType,'data':base64Encode(imageBytes)};
+    }
+
+    final client=io.HttpClient()..connectionTimeout=const Duration(seconds:25);
+    try {
+      final req=await client.postUrl(uri);
+      req.headers.contentType=io.ContentType.json;
+      req.write(jsonEncode(payload));
+      final res=await req.close().timeout(const Duration(seconds:60));
+      final body=await res.transform(utf8.decoder).join();
+      dynamic decoded;
+      try { decoded=jsonDecode(body); } catch (_) {
+        throw Exception('AI server ने पढ़ने योग्य जवाब नहीं दिया (HTTP ${res.statusCode}).');
+      }
+      if(res.statusCode<200||res.statusCode>=300) {
+        final detail=(decoded is Map?decoded['error']:null)?.toString();
+        throw Exception(detail??'AI server error (HTTP ${res.statusCode}).');
+      }
+      final answer=(decoded is Map?decoded['answer']:null)?.toString().trim();
+      if(answer==null||answer.isEmpty)throw Exception('AI से खाली जवाब मिला। कृपया दोबारा कोशिश करें।');
+      if(mounted) {
+        setState(()=>msgs.add(['ai',answer]));
+        await _persistConversation();
+      }
+    } finally {
+      client.close(force:true);
+    }
+  } catch(e) {
+    final message='Zing AI से जवाब नहीं मिल पाया: ${e.toString().replaceFirst('Exception: ','')}';
+    if(mounted) {
+      setState(()=>msgs.add(['ai',message]));
+      await _persistConversation();
+    }
+  } finally {
+    if(mounted)setState(()=>sending=false);
   }
-  answer=(decoded is Map?decoded['answer']:null)?.toString().trim();
-}finally{client.close(force:true);}
-if(answer==null||answer.isEmpty)throw Exception('empty-answer');if(mounted){setState(()=>msgs.add(['ai',answer!]));await _persistConversation();}}on FirebaseException catch(e){final message='AI request failed (${e.code}). Zing Zone Worker connection aur internet check karna hoga.';if(mounted){setState(()=>msgs.add(['ai',message]));await _persistConversation();}}catch(e){final message='Zing AI server error: $e';if(mounted){setState(()=>msgs.add(['ai',message]));await _persistConversation();}}finally{if(mounted)setState(()=>sending=false);}}Future<void> attachImage() async {
+}
+Future<void> attachImage() async {
   final choice=await showModalBottomSheet<String>(context:context,showDragHandle:true,builder:(ctx)=>SafeArea(child:Column(mainAxisSize:MainAxisSize.min,children:[
     ListTile(leading:const Icon(Icons.photo_library_outlined),title:const Text('तस्वीर चुनें'),onTap:()=>Navigator.pop(ctx,'image')),
     ListTile(leading:const Icon(Icons.picture_as_pdf_outlined),title:const Text('PDF दस्तावेज़ चुनें'),onTap:()=>Navigator.pop(ctx,'pdf')),

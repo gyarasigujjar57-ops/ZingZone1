@@ -2,7 +2,7 @@ name: Flutter APK Build
 
 on:
   push:
-    branches: [main, step-1-ai-foundation]
+    branches: [main, step-1-ai-foundation, chat-ai-end-to-end-fix]
   workflow_dispatch:
 
 permissions:

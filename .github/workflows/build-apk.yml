@@ -56,23 +56,6 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - name: Run tests
         run: flutter test
-      - name: Prepare CI debug signing key for Firebase fingerprints
-        run: |
-          mkdir -p "$HOME/.config/.android"
-          if [ ! -f "$HOME/.config/.android/debug.keystore" ]; then
-            keytool -genkeypair -v \
-              -keystore "$HOME/.config/.android/debug.keystore" \
-              -storepass android \
-              -alias AndroidDebugKey \
-              -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-      - name: Print Android signing fingerprints for Firebase setup
-        continue-on-error: true
-        run: |
-          cd android
-          ./gradlew signingReport
       - name: Test deterministic Worker intake engine
         run: node --test worker/test/*.test.js
       - name: Smoke test live Zing Zone AI Worker (Step 1)

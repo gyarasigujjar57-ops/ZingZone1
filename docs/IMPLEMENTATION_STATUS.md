@@ -1,27 +1,24 @@
-# Zing Zone implementation status
+# Zing Zone – Step 1 AI Foundation
 
-Last updated: 2026-10-12
+Updated: 2026-11-09
 
-## Current verified repository state
-- Flutter APK build workflow #45 completed successfully for commit `ab32a54ac8368e29e6b00796b4635fa0e80fe4cb`.
-- Chat UI now calls the Firebase callable function `askZingAI` in `asia-south1`.
-- Google Sign-in and phone SMS OTP flows are wired to Firebase Authentication in the Flutter source.
-- These are code integrations only. The live sign-in flows still need device-side testing and correct Firebase/OAuth configuration.
-- The callable AI function source exists under `functions/src/index.ts`, but it has not been confirmed deployed; the Gemini secret has not been confirmed set.
-- Store catalogue/cart/wishlist still use demo/local data. Wallet, tokens, rewards and Premium are not live financial services.
-- Operator workspace, isolated customer sessions, and official portal integrations are not complete.
+## Implemented in this branch
+- Flutter chat uses a dedicated Cloudflare AI service client.
+- Selected JPG, PNG or WEBP images are sent to the Worker for Gemini image understanding (5 MB client-side limit); OCR text remains user-reviewed before sending. Image-only questions can still be sent if local OCR finds no readable text.
+- Language preference persists locally and syncs to the signed-in user's profile where Firestore is available. The selector includes Hindi-English mode and India's 22 scheduled languages; actual response quality varies by model support.
+- Basic Master Profile fields (display name, state, district) persist locally and sync for signed-in users. Sensitive identity numbers are not collected in this Step 1 profile.
+- Signed-in users sync the current chat and archived chats to their own Firestore user path; Guest Mode retains local history and drafts.
+- Form-related messages are recorded in a local AI Task Center.
+- Worker source adds language/profile context, image input, intent classification, bounded payload sizes and explicit capability limits.
+- Worker source uses current Gemini 3.x model IDs, with fallback.
+- CI workflow is enabled for this implementation branch.
 
-## Next steps to activate and verify AI
-1. Confirm the Firebase project billing plan and current Cloud Functions deployment requirements before enabling billing. Do not enable billing without understanding potential charges.
-2. Create/get a Gemini API key through the official Google AI Studio / Google AI API process.
-3. Store the key as the Firebase Functions secret `GEMINI_API_KEY`. Never put it in Flutter source, a public GitHub file, or a chat message.
-4. Build and deploy the Functions code and Firestore rules using an authenticated Firebase CLI environment.
-5. Test `askZingAI` from a signed-in Android account. A successful APK build alone does not prove the function is deployed or callable.
-6. Test Phone OTP and Google sign-in on a real Android device; resolve Firebase provider, SHA-1/SHA-256 and OAuth configuration issues if shown.
+## Not claimed as complete
+- GitHub source changes do not automatically deploy the Worker to Cloudflare. The deployed Worker must be updated and tested separately.
+- Firestore sync requires the correct Firebase project configuration, signed-in account and deployed Firestore rules. Guest data remains local.
+- This branch does not provide server-side Firebase token verification, App Check enforcement, distributed rate limiting, push notifications, live website automation, advanced OCR, eligibility decisions or document vault storage.
+- AI image requests require the deployed Worker to have this new image-capable code. Until deployment, the existing live Worker will not understand the new image payload.
+- APK build success alone does not prove live AI, image understanding, Firestore sync or all languages on a physical phone.
 
-## Security and product notes
-- The callable function currently requires Firebase Authentication, but App Check enforcement is disabled. Before production, add App Check and abuse/rate-limit controls.
-- Keep Firestore rules restrictive. Never accept client-submitted wallet balances, token balances, reward grants, purchases or payout status as authoritative.
-- Government-form automation must respect portal terms and stop for OTP, CAPTCHA, biometrics, payments and final legal submission.
-- Real-money rewards, prize pools, ads and payouts need legal and platform-policy review before activation.
-- Passing APK build and tests is not proof that all live integrations work.
+## Verification
+The branch CI workflow runs Flutter analysis/tests, Worker unit tests, live Worker health/chat smoke test and release APK build. The live smoke test targets the currently deployed Worker, which may differ from GitHub source until deployment.

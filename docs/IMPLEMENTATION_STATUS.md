@@ -14,10 +14,10 @@ Updated: 2026-11-09
 - CI workflow is enabled for this implementation branch.
 
 ## Not claimed as complete
-- GitHub source changes do not automatically deploy the Worker to Cloudflare. The deployed Worker must be updated and tested separately.
+- Cloudflare Worker `zing-zone-ai` was updated through the Cloudflare API on 2026-11-09 at 18:08:08 UTC (deployment/version `e6d20276-89ba-4f83-aff4-30ae2304c278`). The `GEMINI_API_KEY` secret binding was confirmed present without reading its value. A live end-to-end request from this environment could not be completed; CI smoke verification is still pending.
 - Firestore sync requires the correct Firebase project configuration, signed-in account and deployed Firestore rules. Guest data remains local.
 - This branch does not provide server-side Firebase token verification, App Check enforcement, distributed rate limiting, push notifications, live website automation, advanced OCR, eligibility decisions or document vault storage.
-- AI image requests require the deployed Worker to have this new image-capable code. Until deployment, the existing live Worker will not understand the new image payload.
+- Firebase Firestore rules in this branch have not yet been deployed to the Firebase project. Until deployment, cloud profile/chat writes may be rejected; local Guest Mode remains available.
 - APK build success alone does not prove live AI, image understanding, Firestore sync or all languages on a physical phone.
 
 ## Verification

@@ -6,6 +6,6 @@ See [Step 1 implementation status](docs/IMPLEMENTATION_STATUS.md). The Cloudflar
 
 Required Worker secret: `GEMINI_API_KEY`.
 
-Step 1 adds multilingual chat preference, basic Master Profile, signed-in Firestore chat sync, local Guest Mode history/drafts/tasks, and image-capable AI request support in source. The Worker must be deployed separately for the new source behavior to become live.
+Step 1 adds multilingual chat preference, basic Master Profile, signed-in Firestore chat sync, local Guest Mode history/drafts/tasks, and image-capable AI request support in source. The updated Worker source was deployed on 2026-11-09; CI and physical-device verification are still pending.
 
 Live browser automation, expanded OCR/document intelligence, eligibility decisions and official portal automation are not claimed as active in Step 1.

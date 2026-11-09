@@ -2,9 +2,7 @@ name: Flutter APK Build
 
 on:
   push:
-    branches: ['**']
-  pull_request:
-    branches: [main]
+    branches: [main, step-1-ai-foundation]
   workflow_dispatch:
 
 permissions:

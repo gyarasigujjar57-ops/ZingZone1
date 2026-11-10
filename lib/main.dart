@@ -19,6 +19,34 @@ import 'firebase_options.dart';
 
 const navy=Color(0xFF11152B), blue=Color(0xFF4965F5), violet=Color(0xFF7856D9), pink=Color(0xFFEF4F83), muted=Color(0xFF747B8F), line=Color(0xFFE8EAF1), pale=Color(0xFFF6F7FB);
 const defaultZingWorkerUrl='https://zing-zone-ai.gyarasigujjar57.workers.dev';
+const zingLanguages = <String,String>{
+  'auto':'अपने आप पहचानें',
+  'en':'English',
+  'as':'অসমীয়া (Assamese)',
+  'bn':'বাংলা (Bengali)',
+  'brx':'बड़ो (Bodo)',
+  'doi':'डोगरी (Dogri)',
+  'gu':'ગુજરાતી (Gujarati)',
+  'hi':'हिन्दी (Hindi)',
+  'kn':'ಕನ್ನಡ (Kannada)',
+  'ks':'कॉशुर (Kashmiri)',
+  'kok':'कोंकणी (Konkani)',
+  'mai':'मैथिली (Maithili)',
+  'ml':'മലയാളം (Malayalam)',
+  'mni':'মৈতৈলোন্ (Manipuri)',
+  'mr':'मराठी (Marathi)',
+  'ne':'नेपाली (Nepali)',
+  'or':'ଓଡ଼ିଆ (Odia)',
+  'pa':'ਪੰਜਾਬੀ (Punjabi)',
+  'sa':'संस्कृतम् (Sanskrit)',
+  'sat':'ᱥᱟᱱᱛᱟᱲᱤ (Santali)',
+  'sd':'سنڌي (Sindhi)',
+  'ta':'தமிழ் (Tamil)',
+  'te':'తెలుగు (Telugu)',
+  'ur':'اردو (Urdu)',
+};
+String zingLanguageLabel(String code)=>zingLanguages[code]??zingLanguages['auto']!;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: firebaseOptions);
@@ -816,21 +844,19 @@ class AppSettingsPage extends StatefulWidget {
 }
 class _AppSettingsPageState extends State<AppSettingsPage> {
   final workerUrlController = TextEditingController();
-  @override void initState() { super.initState(); _loadWorkerUrl(); }
-  Future<void> _loadWorkerUrl() async { final p=await SharedPreferences.getInstance(); workerUrlController.text=p.getString('zing_ai_worker_url')??defaultZingWorkerUrl; }
+  String language = 'auto';
+  @override void initState() { super.initState(); _loadPreferences(); }
+  Future<void> _loadPreferences() async { final p=await SharedPreferences.getInstance(); if(!mounted)return; setState(() { workerUrlController.text=p.getString('zing_ai_worker_url')??defaultZingWorkerUrl; language=p.getString('zing_language')??'auto'; }); }
+  Future<void> _selectLanguage() async { final picked=await showModalBottomSheet<String>(context:context,isScrollControlled:true,showDragHandle:true,builder:(ctx)=>SafeArea(child:SizedBox(height:MediaQuery.of(ctx).size.height*0.72,child:Column(children:[const Padding(padding:EdgeInsets.all(16),child:Text('अपनी भाषा चुनें / Choose language',style:TextStyle(fontSize:17,fontWeight:FontWeight.w900,color:navy))),const Padding(padding:EdgeInsets.fromLTRB(16,0,16,12),child:Text('Auto mode में Zing AI आपके संदेश की भाषा और लिपि पहचानता है।',style:TextStyle(color:muted,fontSize:12))),Expanded(child:ListView(children:zingLanguages.entries.map((entry)=>ListTile(title:Text(entry.value),trailing:entry.key==language?const Icon(Icons.check,color:blue):null,onTap:()=>Navigator.pop(ctx,entry.key))).toList()))])))); if(picked==null)return; final p=await SharedPreferences.getInstance(); await p.setString('zing_language',picked); if(mounted){setState(()=>language=picked);note(context,'भाषा सेव हो गई। अगला AI जवाब इसी भाषा में आएगा।');} }
   @override void dispose() { workerUrlController.dispose(); super.dispose(); }
   Future<void> _editWorkerUrl() async { final ctl=TextEditingController(text:workerUrlController.text); final picked=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Free AI server URL'),content:TextField(controller:ctl,keyboardType:TextInputType.url,autocorrect:false,decoration:const InputDecoration(hintText:'https://your-worker.workers.dev',helperText:'Cloudflare Worker ka deployed HTTPS URL')),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,ctl.text.trim()),child:const Text('Save'))])); if(picked!=null){final v=picked.trim();if(v.isNotEmpty&&(!v.startsWith('https://')||Uri.tryParse(v)?.host.isEmpty==true)){if(mounted)note(context,'Valid HTTPS URL enter karo.');return;}final p=await SharedPreferences.getInstance();if(v.isEmpty){await p.remove('zing_ai_worker_url');}else{await p.setString('zing_ai_worker_url',v);}workerUrlController.text=v;if(mounted){setState((){});note(context,v.isEmpty?'Default Zing AI server restored.':'Zing AI server URL saved.');}}}
   bool biometric = false, compact = false, sounds = true, haptics = true, accessibility = false;
-  String language = 'हिन्दी + English';
   @override Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Settings')),
     body: ListView(padding: const EdgeInsets.all(16), children: [
       const Text('APP PREFERENCES', style: TextStyle(fontWeight: FontWeight.w900, color: muted, letterSpacing: 1)),
       const SizedBox(height: 8),
-      ListTile(leading: const Icon(Icons.language, color: blue), title: const Text('App language'), subtitle: Text(language), trailing: const Icon(Icons.chevron_right), onTap: () async {
-        final picked = await showModalBottomSheet<String>(context: c, builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: ['हिन्दी + English','हिन्दी','English','ગુજરાતી','ਪੰਜਾਬੀ'].map((v) => ListTile(title: Text(v), trailing: v == language ? const Icon(Icons.check,color:blue) : null, onTap: () => Navigator.pop(ctx,v))).toList())));
-        if (picked != null) setState(() => language = picked);
-      }),
+      ListTile(leading: const Icon(Icons.language, color: blue), title: const Text('App / AI response language'), subtitle: Text(zingLanguageLabel(language)), trailing: const Icon(Icons.chevron_right), onTap: _selectLanguage),
       SwitchListTile(value: sounds, onChanged: (v)=>setState(()=>sounds=v), secondary: const Icon(Icons.volume_up_outlined), title: const Text('Sound effects')),
       SwitchListTile(value: haptics, onChanged: (v)=>setState(()=>haptics=v), secondary: const Icon(Icons.vibration), title: const Text('Haptic feedback')),
       SwitchListTile(value: compact, onChanged: (v)=>setState(()=>compact=v), secondary: const Icon(Icons.view_agenda_outlined), title: const Text('Compact layout')),
@@ -844,7 +870,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       SwitchListTile(value: biometric, onChanged: (v)=>setState(()=>biometric=v), secondary: const Icon(Icons.fingerprint), title: const Text('Biometric unlock'), subtitle: const Text('Preference preview; device authentication is not connected.')),
       ListTile(leading: const Icon(Icons.privacy_tip_outlined), title: const Text('Privacy controls'), subtitle: const Text('Review permissions and data handling'), onTap: ()=>page(c,const PlainPage(title:'Privacy controls'))),
       ListTile(leading: const Icon(Icons.help_outline), title: const Text('Help & support'), onTap: ()=>page(c,const PlainPage(title:'Help & support'))),
-      const Padding(padding: EdgeInsets.all(8), child: Text('These preferences currently apply only in this open session. Persistent settings will be added with local storage/backend.',style:TextStyle(fontSize:11,color:muted))),
+      const Padding(padding: EdgeInsets.all(8), child: Text('Language selection is saved on this device and sent with AI requests. Other preview preferences apply only in this open session.',style:TextStyle(fontSize:11,color:muted))),
     ]),
   );
 }

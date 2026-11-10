@@ -1,5 +1,6 @@
 import { analyzeIntake } from "./intake.js";
 import { classifyIntent } from "./intent.js";
+import { languageInstruction } from "./language.js";
 
 const SYSTEM_PROMPT = `You are Zing AI inside Zing Zone, an all-India multilingual AI assistant with a strong public-service and form-assistance focus.
 Reply in the user's selected language when supplied; otherwise follow the language and script the user used. Understand Hindi, Devanagari, Hinglish, spelling mistakes, short replies and conversational context. Keep explanations clear and practical.
@@ -52,13 +53,14 @@ export default {
       contents[contents.length - 1].parts.push(image);
     }
 
-    const language = typeof body.language === "string" ? body.language.slice(0, 60) : "user's language";
+    const language = typeof body.language === "string" ? body.language.slice(0, 20) : "auto";
+    const languagePolicy = languageInstruction(language);
     const profile = body.profile && typeof body.profile === "object" ? {
       displayName: typeof body.profile.displayName === "string" ? body.profile.displayName.slice(0, 100) : "",
       state: typeof body.profile.state === "string" ? body.profile.state.slice(0, 100) : "",
       district: typeof body.profile.district === "string" ? body.profile.district.slice(0, 100) : ""
     } : {};
-    const systemInstruction = SYSTEM_PROMPT + "\n\nUSER LANGUAGE PREFERENCE: " + language +
+    const systemInstruction = SYSTEM_PROMPT + "\n\nUSER LANGUAGE PREFERENCE (" + language + "): " + languagePolicy + "\nDo not switch languages unless the user asks. For official names and form field labels, preserve the original wording and explain it in the selected language." +
       "\n\nOPTIONAL BASIC PROFILE (user-provided; treat as unverified context, do not assume missing values): " + JSON.stringify(profile);
 
     try {
@@ -96,7 +98,7 @@ export default {
               documents: Array.isArray(body.documents) ? body.documents.slice(0, 20).filter(d => d && typeof d.text === "string").map(d => ({ name: String(d.name || "दस्तावेज़").slice(0, 120), text: d.text.slice(0, 30000) })) : [],
               candidate: {}
             });
-            return jsonResponse({ answer, model, intent, task: taskId ? { id: taskId, status: "in_progress" } : null, intake }, 200, cors);
+            return jsonResponse({ answer, model, language, intent, task: taskId ? { id: taskId, status: "in_progress" } : null, intake }, 200, cors);
           }
           lastMessage = "Gemini returned no answer";
           lastStatus = 502;

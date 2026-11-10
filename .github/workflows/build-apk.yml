@@ -80,10 +80,10 @@ jobs:
           python3 - <<'PY'
           import json, struct, zlib
           w = h = 64
-          raw = b''.join(b'\\x00' + bytes([220, 35, 35]) * w for _ in range(h))
+          raw = b''.join(b'\x00' + bytes([220, 35, 35]) * w for _ in range(h))
           def chunk(kind, data):
               return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
-          png = b'\\x89PNG\\r\\n\\x1a\\n' + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
           body = {"messages":[{"role":"user","text":"Describe the main color in this image in one short sentence."}],"image":{"mimeType":"image/png","data":__import__('base64').b64encode(png).decode()}}
           with open('worker-image-request.json','w') as f: json.dump(body,f)
           PY

@@ -295,7 +295,8 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
     if(imageBytes!=null) {
       if(imageBytes.length>5*1024*1024)throw Exception('तस्वीर 5 MB से बड़ी है। कृपया छोटी JPG/PNG तस्वीर चुनें।');
       final ext=(imageName??'').toLowerCase().split('.').last;
-      final mimeType=ext=='png'?'image/png':ext=='webp'?'image/webp':'image/jpeg';
+      final isPdf=ext=='pdf'||(imageBytes.length>=5&&ascii.decode(imageBytes.take(5).toList(),allowInvalid:true)=='%PDF-');
+      final mimeType=isPdf?'application/pdf':ext=='png'?'image/png':ext=='webp'?'image/webp':'image/jpeg';
       payload['image']={'mimeType':mimeType,'data':base64Encode(imageBytes)};
     }
     final client=io.HttpClient()..connectionTimeout=const Duration(seconds:25);
@@ -334,34 +335,45 @@ class _ChatPageState extends State<ChatPage>{final input=TextEditingController()
 }
 Future<void> attachImage() async {
   final choice=await showModalBottomSheet<String>(context:context,showDragHandle:true,builder:(ctx)=>SafeArea(child:Column(mainAxisSize:MainAxisSize.min,children:[
-    ListTile(leading:const Icon(Icons.photo_library_outlined),title:const Text('तस्वीर चुनें'),onTap:()=>Navigator.pop(ctx,'image')),
+    ListTile(leading:const Icon(Icons.photo_library_outlined),title:const Text('गैलरी से तस्वीर चुनें'),onTap:()=>Navigator.pop(ctx,'gallery')),
+    ListTile(leading:const Icon(Icons.camera_alt_outlined),title:const Text('कैमरा से तस्वीर लें'),onTap:()=>Navigator.pop(ctx,'camera')),
     ListTile(leading:const Icon(Icons.picture_as_pdf_outlined),title:const Text('PDF दस्तावेज़ चुनें'),onTap:()=>Navigator.pop(ctx,'pdf')),
   ])));
   if(choice==null)return;
   try{
-    if(choice=='image'){
-      final file=await picker.pickImage(source:ImageSource.gallery,maxWidth:2200,maxHeight:2200,imageQuality:92);
+    if(choice=='gallery'||choice=='camera'){
+      final file=await picker.pickImage(source:choice=='camera'?ImageSource.camera:ImageSource.gallery,maxWidth:2200,maxHeight:2200,imageQuality:92);
       if(file==null||!mounted)return;
       final bytes=await file.readAsBytes();
+      if(bytes.isEmpty)throw Exception('चुनी गई तस्वीर खाली है। दूसरी तस्वीर चुनें।');
+      if(bytes.length>5*1024*1024)throw Exception('तस्वीर 5 MB से छोटी रखें।');
       setState(()=>sending=true);
-      final text=await _ocrImagePath(file.path);
+      String confirmed='';
+      try {
+        final text=await _ocrImagePath(file.path);
+        if(text.trim().isNotEmpty&&mounted) confirmed=await _reviewOcr(file.name,text);
+      } catch (_) {
+        // OCR is optional: the original image must still be sent to Gemini vision.
+      }
       if(!mounted)return;
-      final confirmed=await _reviewOcr(file.name,text);
-      if(!mounted||confirmed.isEmpty)return;
-      setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed; });
+      setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed.isEmpty?null:confirmed; });
     }else{
       final picked=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf'],withData:true);
       if(picked==null||picked.files.isEmpty||!mounted)return;
       final file=picked.files.single;
-      if(file.size>20*1024*1024)throw Exception('PDF 20 MB से छोटा रखें।');
+      if(file.size>5*1024*1024)throw Exception('PDF 5 MB से छोटा रखें ताकि AI उसे सीधे समझ सके।');
       final bytes=file.bytes;
-      if(bytes==null)throw Exception('PDF bytes unavailable');
+      if(bytes==null||bytes.isEmpty)throw Exception('PDF bytes unavailable');
       setState(()=>sending=true);
-      final text=await _ocrPdf(bytes);
+      String confirmed='';
+      try {
+        final text=await _ocrPdf(bytes);
+        if(text.trim().isNotEmpty&&mounted) confirmed=await _reviewOcr(file.name,text);
+      } catch (_) {
+        // Keep the original PDF; Gemini can inspect the PDF directly.
+      }
       if(!mounted)return;
-      final confirmed=await _reviewOcr(file.name,text);
-      if(!mounted||confirmed.isEmpty)return;
-      setState(() { attachedImage=null; attachedImageName=file.name; pendingOcrText=confirmed; });
+      setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed.isEmpty?null:confirmed; });
     }
   }catch(e){
     if(mounted)note(context,'दस्तावेज़ पढ़ने में समस्या हुई: '+e.toString().replaceFirst('Exception: ',''));

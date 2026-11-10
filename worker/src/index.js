@@ -24,7 +24,7 @@ export default {
       "Content-Type": "application/json; charset=utf-8"
     };
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
-    if (request.method === "GET") return jsonResponse({ service: "Zing Zone AI", status: "online", version: "step-1-foundation", capabilities: ["multilingual-chat", "image-understanding", "form-intake", "task-intent"] }, 200, cors);
+    if (request.method === "GET") return jsonResponse({ service: "Zing Zone AI", status: "online", version: "step-2-language-engine", capabilities: ["all-india-language-engine", "multilingual-chat", "image-understanding", "form-intake", "task-intent"] }, 200, cors);
     if (request.method !== "POST") return jsonResponse({ error: "Use POST" }, 405, cors);
     if (!env.GEMINI_API_KEY) return jsonResponse({ error: "Server Gemini key is not configured" }, 503, cors);
 

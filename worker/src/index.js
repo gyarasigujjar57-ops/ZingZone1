@@ -45,8 +45,8 @@ export default {
     if (body.image !== undefined && body.image !== null) {
       const mimeType = body.image?.mimeType;
       const data = body.image?.data;
-      if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType) || typeof data !== "string" || data.length > 7_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
-        return jsonResponse({ error: "Image format or size is not supported. Use JPG, PNG or WEBP under 5 MB." }, 400, cors);
+      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(mimeType) || typeof data !== "string" || data.length > 7_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+        return jsonResponse({ error: "File format or size is not supported. Use JPG, PNG, WEBP or PDF under 5 MB." }, 400, cors);
       }
       image = { inlineData: { mimeType, data } };
       contents[contents.length - 1].parts.push(image);

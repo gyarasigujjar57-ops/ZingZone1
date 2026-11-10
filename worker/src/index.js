@@ -64,7 +64,9 @@ export default {
       "\n\nOPTIONAL BASIC PROFILE (user-provided; treat as unverified context, do not assume missing values): " + JSON.stringify(profile);
 
     try {
-      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
+      // Try a lighter stable fallback when a model-specific quota/capacity limit is hit.
+      // A 429 on one model must not prevent trying the next supported model.
+      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"];
       let lastMessage = "Gemini API request failed";
       let lastStatus = 503;
       for (const model of models) {
@@ -106,8 +108,16 @@ export default {
         }
         lastMessage = data?.error?.message || "Gemini API request failed";
         lastStatus = response.status;
-        if (response.status === 429) return jsonResponse({ error: "AI service is busy or rate-limited. Please retry shortly." }, 429, cors);
-        if (![500, 502, 503, 504].includes(response.status)) return jsonResponse({ error: "AI service rejected the request. Check the server model/key configuration." }, 502, cors);
+        if (response.status === 429 || response.status === 404 || [500, 502, 503, 504].includes(response.status)) {
+          // Continue to the next model; quota and capacity can differ by model.
+          continue;
+        }
+        if (![500, 502, 503, 504].includes(response.status)) {
+          return jsonResponse({ error: "AI service rejected the request. Check the server model/key configuration." }, 502, cors);
+        }
+      }
+      if (lastStatus === 429) {
+        return jsonResponse({ error: "Gemini quota/rate limit reached on all configured fallback models. Check the active project limits in AI Studio and retry after the quota window resets.", retryable: true }, 429, cors);
       }
       return jsonResponse({ error: lastMessage, retryable: lastStatus >= 500 }, 502, cors);
     } catch {

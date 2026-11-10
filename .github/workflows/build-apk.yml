@@ -65,15 +65,22 @@ jobs:
           health="$(curl --silent --show-error --max-time 30 "$WORKER_URL/")"
           echo "Worker health: $health"
           echo "$health" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("status")=="online", d'
-          code="$(curl --silent --show-error --max-time 90 -o worker-response.json -w "%{http_code}" \
-            -H 'Content-Type: application/json' \
-            -d '{"messages":[{"role":"user","text":"Mujhe army ka form bharna hai"}]}' \
-            "$WORKER_URL/")"
+          code="000"
+          for attempt in 1 2 3; do
+            code="$(curl --silent --show-error --max-time 90 -o worker-response.json -w "%{http_code}" \
+              -H 'Content-Type: application/json' \
+              -d '{"language":"hi","messages":[{"role":"user","text":"Mujhe army ka form bharna hai"}]}' \
+              "$WORKER_URL/")"
+            if [ "$code" = "200" ]; then break; fi
+            if [ "$code" != "429" ]; then break; fi
+            echo "Gemini rate limit on attempt $attempt; waiting before retry"
+            sleep $((attempt * 20))
+          done
           echo "Worker POST HTTP status: $code"
           echo "Worker POST response body:"
           cat worker-response.json
           test "$code" = "200"
-          python3 -c 'import json; d=json.load(open("worker-response.json")); a=d.get("answer",""); assert isinstance(a,str) and len(a.strip())>=20, d; assert any(x in a.lower() for x in ["किस", "कौन", "भर्ती", "recruitment", "which", "कृपया", "बताइए", "बताएं"]) or "?" in a or "？" in a, "Expected a natural clarifying question for vague army-form request: "+a; print("Live conversational intake reply received:", a[:500])'
+          python3 -c 'import json; d=json.load(open("worker-response.json")); a=d.get("answer",""); assert d.get("language")=="hi", d; assert isinstance(a,str) and len(a.strip())>=20, d; assert any(x in a.lower() for x in ["किस", "कौन", "भर्ती", "recruitment", "which", "कृपया", "बताइए", "बताएं"]) or "?" in a or "？" in a, "Expected a natural clarifying question for vague army-form request: "+a; print("Live Hindi language-policy reply received:", a[:500])'
       - name: Smoke test live Gemini image understanding
         run: |
           set -euo pipefail

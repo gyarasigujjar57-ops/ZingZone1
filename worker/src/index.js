@@ -1,71 +1,128 @@
 import { analyzeIntake } from "./intake.js";
-const SYSTEM_PROMPT = "You are Zing AI, the conversational intake agent for ZingZone's future form-filling workflow. Reply in the user's language, especially clear Hindi/Devanagari or Hinglish. PHASE 1 INTAKE IS YOUR ONLY CURRENT FORM-AUTOMATION ROLE: understand the requested service/recruitment, identify the exact application, gather missing facts safely, create a checklist from reliable supplied sources, and clearly state what is known, unknown, and awaiting confirmation. Do not claim to open websites, fill fields, upload documents, check live eligibility, or submit anything; those are separate future capabilities and must never be simulated.\n\nCONVERSATIONAL STYLE (MANDATORY): Talk like a patient, capable human assistant, not a form template or scripted bot. Understand casual Hindi, Devanagari, Hinglish, spelling mistakes, short replies and context from previous turns. Start naturally and ask one clear follow-up at a time. Example: if user says 'mujhe form bharna hai', ask 'किसका फ़ॉर्म भरना है—किसी भर्ती का, सरकारी योजना/प्रमाणपत्र का या कोई दूसरी सेवा?'; if they answer 'army', ask which exact Army recruitment/post (Agniveer GD/Technical/Clerk/Tradesman, officer entry, etc.) or request the official notification. Do not assume which Army form. If user says only 'scholarship', ask the state/scheme or school/college context. If they give a partial answer, acknowledge it and ask only the next missing detail. Do not dump the full checklist at the beginning. Avoid repeating questions already answered. Keep tone warm, plain and concise, with natural transitions. Never claim to have performed actions you cannot perform.
+import { classifyIntent } from "./intent.js";
+import { languageInstruction } from "./language.js";
+import { CHAT_BEHAVIOR_POLICY } from "./chat-policy.js";
 
-INTAKE RULES: (1) If the request is vague (e.g. 'army form bhar do'), first ask for the exact recruitment/department/post or the official notification/link/PDF. Ask only ONE most useful question per reply. Do not ask a long questionnaire all at once. (2) After the recruitment is identified, inspect only the notification/link/PDF text actually supplied or accessible in conversation. Extract: department, recruitment name, post/trade, application start/end dates, age cut-off date and limits, relaxations, education/subjects/marks, domicile/state/district restrictions, category rules, physical/medical criteria, fees, required documents, photo/signature/thumb specifications, application stages, and duplicate-application rules. For every rule, identify source page/section if present. If source text is missing or unclear, say so and ask for the official notice; never invent requirements, deadlines, links, fees or rules. (3) Maintain a running intake summary using conversation history: identified application; confirmed user facts; facts extracted from notice; documents received/read; missing information; conflicts; prior-registration/application status; next single question. (4) Ask only for information needed by the identified notice. Separate facts readable from a document from facts only the user can answer. Ask whether the user has already registered/applied for this same recruitment before any duplicate-sensitive next step. (5) Treat OCR text as unverified, not proof of authenticity. Report exact extracted values, source filename/page when known, uncertainty and conflicts. Mask identity numbers; never repeat full Aadhaar, PAN, bank account, phone OTP, passwords or credentials. Ask the user to confirm extracted personal fields before reuse. Do not request unnecessary sensitive documents; suggest masking irrelevant numbers. (6) Compare document values only when the document is supplied and its applicability is established by the notice. If name, DOB, parent name, category, address, marks or other values conflict, STOP and ask one clarifying question; never choose silently. (7) Never infer age eligibility without official cut-off date, DOB and applicable category/relaxation rule. Never infer education eligibility without exact qualification/subject/marks conditions. If facts or rules are missing, classify as 'जाँच अधूरी' rather than eligible/ineligible. (8) Group document checklist into required by notice, conditionally required, and not established/needs confirmation. For each item state whether not provided, text-read only, or user-confirmed. (9) Track whether the user already registered/applied, has an application number, or saved draft, but never request passwords/OTP. (10) Never claim document authenticity, official verification, real-time deadline status, portal compatibility, or successful application. No OTP/CAPTCHA bypass, biometrics, payments, declarations or final submission. User handles those. (11) Be concise and structured, ask one question at a time, do not repeat answered questions, and do not move beyond intake until facts and user confirmation are sufficient. Never fabricate progress percentages or completion status.\n\nGENERAL OCR SAFETY: classify likely document only from text clues; never claim visual inspection or authenticity. Extract only legible values, preserve exact spelling, mark unclear values unreadable, separate found/uncertain/conflicting/missing fields, and ask confirmation. Never invent DOB, names, marks, category, address, dates, eligibility, fees, official URLs or document requirements. Stop on conflicting records. Never request OTPs, passwords, CAPTCHA answers, full bank/card credentials or unnecessary sensitive data. Clearly flag uncertainty.";
+const SYSTEM_PROMPT = `You are Zing AI inside Zing Zone, an all-India multilingual AI assistant with a strong public-service and form-assistance focus.
+Reply in the user's selected language when supplied; otherwise follow the language and script the user used. Understand Hindi, Devanagari, Hinglish, spelling mistakes, short replies and conversational context. Keep explanations clear and practical.
+You can answer general questions, explain official public-service processes, understand user-provided text and images, help prepare a form checklist, and ask for missing information one question at a time.
+For government services: distinguish official verified information from general guidance and uncertainty. Do not invent official URLs, deadlines, fees, eligibility rules, document requirements or application status. Ask which state, department, scheme, recruitment or exact form only when needed. Prefer official government sources supplied in the conversation; do not claim a live website was opened or checked unless a connected tool actually confirms it.
+When a user supplies an image, describe only what is visibly readable and mark uncertainty. Do not claim document authenticity or government verification. Never expose or repeat full identity numbers, bank details, passwords, OTPs or CAPTCHA values. Do not ask users to send OTPs, passwords or CAPTCHA answers in chat.
+Do not claim to fill a live website, upload files, submit an application, or perform actions that are not connected and confirmed. Website automation is not enabled in this Step 1 foundation. Never simulate progress or invent a task completion state.
+For eligibility, ask for the exact current official notification and required facts. If the age cut-off, qualification rules, relaxations or candidate facts are incomplete, say that eligibility is not yet determined. Never guess.
+For forms, take one useful next step at a time, preserve context, and avoid dumping long questionnaires. The user must handle OTP, CAPTCHA, biometric steps, payment, declarations and final submission themselves.
+Be respectful, concise, and useful. ` + "\n\n" + CHAT_BEHAVIOR_POLICY;
+
+function jsonResponse(data, status, cors) {
+  return Response.json(data, { status, headers: { ...cors, "Cache-Control": "no-store" } });
+}
 export default {
   async fetch(request, env) {
-    const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Content-Type": "application/json; charset=utf-8" };
+    const cors = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Content-Type": "application/json; charset=utf-8"
+    };
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
-    if (request.method === "GET") return Response.json({ service: "Zing Zone AI", status: "online", provider: "Gemini API" }, { headers: cors });
-    if (request.method !== "POST") return Response.json({ error: "Use POST" }, { status: 405, headers: cors });
-    if (!env.GEMINI_API_KEY) return Response.json({ error: "Server Gemini key is not configured" }, { status: 503, headers: cors });
+    if (request.method === "GET") return jsonResponse({ service: "Zing Zone AI", status: "online", version: "step-2-language-engine", capabilities: ["all-india-language-engine", "multilingual-chat", "image-understanding", "form-intake", "task-intent"] }, 200, cors);
+    if (request.method !== "POST") return jsonResponse({ error: "Use POST" }, 405, cors);
+    if (!env.GEMINI_API_KEY) return jsonResponse({ error: "Server Gemini key is not configured" }, 503, cors);
+
     let body;
-    try { body = await request.json(); } catch { return Response.json({ error: "Invalid JSON" }, { status: 400, headers: cors }); }
+    try { body = await request.json(); } catch { return jsonResponse({ error: "Invalid JSON" }, 400, cors); }
     const messages = body?.messages;
-    if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20) return Response.json({ error: "Send 1–20 messages" }, { status: 400, headers: cors });
+    if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20) return jsonResponse({ error: "Send 1–20 messages" }, 400, cors);
     const contents = [];
+    let totalChars = 0;
     for (const m of messages) {
-      if (!m || !["user", "assistant"].includes(m.role) || typeof m.text !== "string" || !m.text.trim() || m.text.length > 30000) return Response.json({ error: "Invalid message" }, { status: 400, headers: cors });
+      if (!m || !["user", "assistant"].includes(m.role) || typeof m.text !== "string" || !m.text.trim() || m.text.length > 30000) return jsonResponse({ error: "Invalid message" }, 400, cors);
+      totalChars += m.text.length;
       contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.text.trim() }] });
     }
-    if (contents[contents.length - 1].role !== "user") return Response.json({ error: "Last message must be user" }, { status: 400, headers: cors });
+    if (totalChars > 100000) return jsonResponse({ error: "Conversation is too large; start a new chat or send fewer messages." }, 413, cors);
+    if (contents[contents.length - 1].role !== "user") return jsonResponse({ error: "Last message must be user" }, 400, cors);
+
+    let image = null;
+    if (body.image !== undefined && body.image !== null) {
+      const mimeType = body.image?.mimeType;
+      const data = body.image?.data;
+      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(mimeType) || typeof data !== "string" || data.length > 7_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+        return jsonResponse({ error: "File format or size is not supported. Use JPG, PNG, WEBP or PDF under 5 MB." }, 400, cors);
+      }
+      image = { inlineData: { mimeType, data } };
+      contents[contents.length - 1].parts.push(image);
+    }
+
+    const language = typeof body.language === "string" ? body.language.slice(0, 20) : "auto";
+    const languagePolicy = languageInstruction(language);
+    const profile = body.profile && typeof body.profile === "object" ? {
+      displayName: typeof body.profile.displayName === "string" ? body.profile.displayName.slice(0, 100) : "",
+      state: typeof body.profile.state === "string" ? body.profile.state.slice(0, 100) : "",
+      district: typeof body.profile.district === "string" ? body.profile.district.slice(0, 100) : ""
+    } : {};
+    const systemInstruction = SYSTEM_PROMPT + "\n\nUSER LANGUAGE PREFERENCE (" + language + "): " + languagePolicy + "\nDo not switch languages unless the user asks. For official names and form field labels, preserve the original wording and explain it in the selected language." +
+      "\n\nOPTIONAL BASIC PROFILE (user-provided; treat as unverified context, do not assume missing values): " + JSON.stringify(profile);
+
     try {
-      const models = ["gemini-3.8-flash", "gemini-3.6-flash"];
+      // Try a lighter stable fallback when a model-specific quota/capacity limit is hit.
+      // A 429 on one model must not prevent trying the next supported model.
+      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"];
       let lastMessage = "Gemini API request failed";
       let lastStatus = 503;
       for (const model of models) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          let response;
-          let data;
-          try {
-            response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-                contents,
-                generationConfig: { maxOutputTokens: 1400 }
-              })
+        let response;
+        let data;
+        try {
+          response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemInstruction }] },
+              contents,
+              generationConfig: { maxOutputTokens: 1800, temperature: 0.4 }
+            })
+          });
+          data = await response.json();
+        } catch {
+          lastMessage = "Could not reach Gemini API from Worker";
+          lastStatus = 502;
+          continue;
+        }
+        if (response.ok) {
+          const answer = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
+          if (answer) {
+            const latestUserText = messages.filter(m => m.role === "user").slice(-1)[0]?.text || "";
+            const intent = classifyIntent(latestUserText, Boolean(image));
+            const taskId = intent.requiresTask ? crypto.randomUUID() : null;
+            const intake = analyzeIntake({
+              text: latestUserText,
+              noticeText: typeof body.noticeText === "string" ? body.noticeText.slice(0, 100000) : "",
+              documents: Array.isArray(body.documents) ? body.documents.slice(0, 20).filter(d => d && typeof d.text === "string").map(d => ({ name: String(d.name || "दस्तावेज़").slice(0, 120), text: d.text.slice(0, 30000) })) : [],
+              candidate: {}
             });
-            data = await response.json();
-          } catch {
-            lastMessage = "Could not reach Gemini API from Worker";
-            lastStatus = 502;
-            break;
+            return jsonResponse({ answer, model, language, intent, task: taskId ? { id: taskId, status: "in_progress" } : null, intake }, 200, cors);
           }
-          if (response.ok) {
-            const answer = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("").trim();
-            if (answer) {
-              const userText = messages.filter(m => m.role === "user").map(m => m.text).join("\n");
-              const intake = analyzeIntake({ text: userText, noticeText: typeof body.noticeText === "string" ? body.noticeText.slice(0, 100000) : "", documents: Array.isArray(body.documents) ? body.documents.slice(0, 20).filter(d => d && typeof d.text === "string").map(d => ({ name: String(d.name || "दस्तावेज़").slice(0, 120), text: d.text.slice(0, 30000) })) : [], candidate: body.candidate && typeof body.candidate === "object" ? body.candidate : {} });
-              return Response.json({ answer, model, intake }, { headers: cors });
-            }
-            lastMessage = "Gemini returned no answer";
-            lastStatus = 502;
-            break;
-          }
-          lastMessage = data?.error?.message || "Gemini API request failed";
-          lastStatus = response.status;
-          const retryable = response.status === 503 || response.status === 500 || response.status === 502;
-          if (!retryable) {
-            return Response.json({ error: lastMessage }, { status: response.status === 429 ? 429 : 502, headers: cors });
-          }
-          if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 1200));
+          lastMessage = "Gemini returned no answer";
+          lastStatus = 502;
+          continue;
+        }
+        lastMessage = data?.error?.message || "Gemini API request failed";
+        lastStatus = response.status;
+        if (response.status === 429 || response.status === 404 || [500, 502, 503, 504].includes(response.status)) {
+          // Continue to the next model; quota and capacity can differ by model.
+          continue;
+        }
+        if (![500, 502, 503, 504].includes(response.status)) {
+          return jsonResponse({ error: "AI service rejected the request. Check the server model/key configuration." }, 502, cors);
         }
       }
-      return Response.json({ error: lastMessage, retryable: lastStatus >= 500 }, { status: lastStatus === 429 ? 429 : 502, headers: cors });
+      if (lastStatus === 429) {
+        return jsonResponse({ error: "Gemini quota/rate limit reached on all configured fallback models. Check the active project limits in AI Studio and retry after the quota window resets.", retryable: true }, 429, cors);
+      }
+      return jsonResponse({ error: lastMessage, retryable: lastStatus >= 500 }, 502, cors);
     } catch {
-      return Response.json({ error: "Could not reach Gemini API from Worker" }, { status: 502, headers: cors });
+      return jsonResponse({ error: "Could not complete the AI request" }, 502, cors);
     }
   }
 };

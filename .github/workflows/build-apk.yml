@@ -2,7 +2,9 @@ name: Flutter APK Build
 
 on:
   push:
-    branches: [main, step-1-ai-foundation]
+    branches: [main, step-1-ai-foundation, chat-ai-end-to-end-fix]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -54,23 +56,6 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - name: Run tests
         run: flutter test
-      - name: Prepare CI debug signing key for Firebase fingerprints
-        run: |
-          mkdir -p "$HOME/.config/.android"
-          if [ ! -f "$HOME/.config/.android/debug.keystore" ]; then
-            keytool -genkeypair -v \
-              -keystore "$HOME/.config/.android/debug.keystore" \
-              -storepass android \
-              -alias AndroidDebugKey \
-              -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-      - name: Print Android signing fingerprints for Firebase setup
-        continue-on-error: true
-        run: |
-          cd android
-          ./gradlew signingReport
       - name: Test deterministic Worker intake engine
         run: node --test worker/test/*.test.js
       - name: Smoke test live Zing Zone AI Worker (Step 1)
@@ -80,15 +65,40 @@ jobs:
           health="$(curl --silent --show-error --max-time 30 "$WORKER_URL/")"
           echo "Worker health: $health"
           echo "$health" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("status")=="online", d'
-          code="$(curl --silent --show-error --max-time 90 -o worker-response.json -w "%{http_code}" \
-            -H 'Content-Type: application/json' \
-            -d '{"messages":[{"role":"user","text":"Mujhe army ka form bharna hai"}]}' \
-            "$WORKER_URL/")"
+          code="000"
+          for attempt in 1 2 3; do
+            code="$(curl --silent --show-error --max-time 90 -o worker-response.json -w "%{http_code}" \
+              -H 'Content-Type: application/json' \
+              -d '{"language":"hi","messages":[{"role":"user","text":"Mujhe army ka form bharna hai"}]}' \
+              "$WORKER_URL/")"
+            if [ "$code" = "200" ]; then break; fi
+            if [ "$code" != "429" ]; then break; fi
+            echo "Gemini rate limit on attempt $attempt; waiting before retry"
+            sleep $((attempt * 20))
+          done
           echo "Worker POST HTTP status: $code"
           echo "Worker POST response body:"
           cat worker-response.json
           test "$code" = "200"
-          python3 -c 'import json; d=json.load(open("worker-response.json")); a=d.get("answer",""); assert isinstance(a,str) and len(a.strip())>=20, d; assert any(x in a.lower() for x in ["किस", "कौन", "भर्ती", "recruitment", "which", "कृपया", "बताइए", "बताएं"]) or "?" in a or "？" in a, "Expected a natural clarifying question for vague army-form request: "+a; print("Live conversational intake reply received:", a[:500])'
+          python3 -c 'import json; d=json.load(open("worker-response.json")); a=d.get("answer",""); assert d.get("language")=="hi", d; assert isinstance(a,str) and len(a.strip())>=20, d; assert any(x in a.lower() for x in ["किस", "कौन", "भर्ती", "recruitment", "which", "कृपया", "बताइए", "बताएं"]) or "?" in a or "？" in a, "Expected a natural clarifying question for vague army-form request: "+a; print("Live Hindi language-policy reply received:", a[:500])'
+      - name: Smoke test live Gemini image understanding
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, struct, zlib
+          w = h = 64
+          raw = b''.join(b'\x00' + bytes([220, 35, 35]) * w for _ in range(h))
+          def chunk(kind, data):
+              return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+          body = {"messages":[{"role":"user","text":"Describe the main color in this image in one short sentence."}],"image":{"mimeType":"image/png","data":__import__('base64').b64encode(png).decode()}}
+          with open('worker-image-request.json','w') as f: json.dump(body,f)
+          PY
+          code="$(curl --silent --show-error --max-time 90 -o worker-image-response.json -w "%{http_code}" -H 'Content-Type: application/json' --data-binary @worker-image-request.json "https://zing-zone-ai.gyarasigujjar57.workers.dev/")"
+          echo "Worker image POST HTTP status: $code"
+          cat worker-image-response.json
+          test "$code" = "200"
+          python3 -c 'import json; d=json.load(open("worker-image-response.json")); a=d.get("answer",""); assert isinstance(a,str) and len(a.strip())>=5, d; print("Live Gemini image response received:", a[:300])'
       - name: Build release APK
         run: |
           for attempt in 1 2 3; do

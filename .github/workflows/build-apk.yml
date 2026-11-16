@@ -59,7 +59,7 @@ jobs:
       - name: Test deterministic Worker intake engine
         run: node --test worker/test/*.test.js
       - name: Run all 19 live chat and language behavior checks
-        if: github.ref == 'refs/heads/chat-ai-end-to-end-fix'
+        if: github.ref == 'refs/heads/chat-ai-end-to-end-fix' || github.event.pull_request.head.ref == 'chat-ai-end-to-end-fix'
         env:
           ZING_WORKER_URL: https://zing-zone-ai.gyarasigujjar57.workers.dev
         run: node worker/test/live-chat-checklist.mjs

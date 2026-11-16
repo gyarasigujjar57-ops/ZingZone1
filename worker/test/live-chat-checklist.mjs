@@ -35,12 +35,18 @@ let passed=0;
 const failures=[];
 for (const [name,payload,check] of cases) {
   try {
-    const response=await fetch(base+"/",{
-      method:"POST",
-      headers:{"content-type":"application/json"},
-      body:JSON.stringify(payload)
-    });
-    const data=await response.json();
+    let response, data;
+    for (let attempt=1; attempt<=3; attempt++) {
+      response=await fetch(base+"/",{
+        method:"POST",
+        headers:{"content-type":"application/json"},
+        body:JSON.stringify(payload)
+      });
+      data=await response.json();
+      if (response.status!==429 || attempt===3) break;
+      console.log("RATE LIMIT "+name+"; retrying after "+(attempt*15000)+" ms");
+      await new Promise(resolve=>setTimeout(resolve,attempt*15000));
+    }
     if (!response.ok) throw new Error("HTTP "+response.status+": "+(data.error||"request failed"));
     if (typeof data.answer!=="string" || !data.answer.trim()) throw new Error("empty answer");
     if (!check(data.answer)) throw new Error("answer did not satisfy expected behavior; output: "+data.answer.slice(0,240));
@@ -50,6 +56,7 @@ for (const [name,payload,check] of cases) {
     failures.push({name,error:String(error)});
     console.log("FAIL "+name+" — "+String(error));
   }
+  if (name!==cases[cases.length-1][0]) await new Promise(resolve=>setTimeout(resolve,1500));
 }
 console.log("\nRESULT: "+passed+"/"+cases.length+" passed; "+failures.length+" failed.");
 if (failures.length) process.exitCode=1;

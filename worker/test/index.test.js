@@ -113,6 +113,6 @@ test("falls back when Gemini restricts a model for new projects",async()=>{
 
 test("does not retain a Gemini 2.5 model in the fallback configuration",async()=>{
   const source=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../src/index.js",import.meta.url),"utf8"));
-  assert.doesNotMatch(source,/gemini-2\\.5-flash-lite/);
-  assert.match(source,/gemini-3\\.5-flash-lite/);
+  assert.equal(source.includes("gemini-2.5-flash-lite"),false);
+  assert.equal(source.includes("gemini-3.5-flash-lite"),true);
 });

@@ -19,6 +19,34 @@ import 'firebase_options.dart';
 
 const navy=Color(0xFF11152B), blue=Color(0xFF4965F5), violet=Color(0xFF7856D9), pink=Color(0xFFEF4F83), muted=Color(0xFF747B8F), line=Color(0xFFE8EAF1), pale=Color(0xFFF6F7FB);
 const defaultZingWorkerUrl='https://zing-zone-ai.gyarasigujjar57.workers.dev';
+const zingLanguages = <String,String>{
+  'auto':'अपने आप पहचानें',
+  'en':'English',
+  'as':'অসমীয়া (Assamese)',
+  'bn':'বাংলা (Bengali)',
+  'brx':'बड़ो (Bodo)',
+  'doi':'डोगरी (Dogri)',
+  'gu':'ગુજરાતી (Gujarati)',
+  'hi':'हिन्दी (Hindi)',
+  'kn':'ಕನ್ನಡ (Kannada)',
+  'ks':'कॉशुर (Kashmiri)',
+  'kok':'कोंकणी (Konkani)',
+  'mai':'मैथिली (Maithili)',
+  'ml':'മലയാളം (Malayalam)',
+  'mni':'মৈতৈলোন্ (Manipuri)',
+  'mr':'मराठी (Marathi)',
+  'ne':'नेपाली (Nepali)',
+  'or':'ଓଡ଼ିଆ (Odia)',
+  'pa':'ਪੰਜਾਬੀ (Punjabi)',
+  'sa':'संस्कृतम् (Sanskrit)',
+  'sat':'ᱥᱟᱱᱛᱟᱲᱤ (Santali)',
+  'sd':'سنڌي (Sindhi)',
+  'ta':'தமிழ் (Tamil)',
+  'te':'తెలుగు (Telugu)',
+  'ur':'اردو (Urdu)',
+};
+String zingLanguageLabel(String code)=>zingLanguages[code]??zingLanguages['auto']!;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: firebaseOptions);
@@ -259,53 +287,121 @@ class _PhoneOtpState extends State<PhoneOtp>{final code=TextEditingController();
 class Shell extends StatefulWidget{const Shell({super.key});@override State<Shell> createState()=>_ShellState();}
 class _ShellState extends State<Shell>{int tab=0;@override Widget build(BuildContext c)=>Scaffold(body:Column(children:[if(Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser==null)Container(width:double.infinity,padding:const EdgeInsets.symmetric(horizontal:16,vertical:8),color:const Color(0xFFEFF4FF),child:const Row(children:[Icon(Icons.explore_outlined,size:16,color:blue),SizedBox(width:8),Expanded(child:Text('GUEST MODE • Explore and test without signing in',style:TextStyle(color:blue,fontSize:11,fontWeight:FontWeight.w800)))])),Expanded(child:IndexedStack(index:tab,children:const[ChatPage(),StorePage(),RewardsPage(),ProfilePage()]))]),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.chat_bubble_outline),selectedIcon:Icon(Icons.chat_bubble),label:'AI Chat'),NavigationDestination(icon:Icon(Icons.shopping_bag_outlined),selectedIcon:Icon(Icons.shopping_bag),label:'Store'),NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),selectedIcon:Icon(Icons.card_giftcard),label:'Rewards'),NavigationDestination(icon:Icon(Icons.person_outline),selectedIcon:Icon(Icons.person),label:'Profile')]));}
 class ChatPage extends StatefulWidget{const ChatPage({super.key});@override State<ChatPage> createState()=>_ChatPageState();}
-class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;String? pendingOcrText;bool sending=false;@override void initState(){super.initState();_restoreConversation();}Future<void> _restoreConversation() async {final saved=await ChatMemory.loadCurrent();if(!mounted||saved.isEmpty)return;try{final decoded=jsonDecode(saved) as List<dynamic>;setState((){msgs..clear()..addAll(decoded.map((x)=>(x as List<dynamic>).map((v)=>v.toString()).toList()));});}catch(_){}}Future<void> _persistConversation() async {await ChatMemory.saveCurrent(jsonEncode(msgs));}@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset]) async {final s=(preset??input.text).trim();if((s.isEmpty&&attachedImage==null&&pendingOcrText==null)||sending)return;final ocr=pendingOcrText;final userText=(s.isEmpty?'इस दस्तावेज़ को पढ़ो और समझाओ।':s)+(ocr==null?'':'\n\nयूज़र द्वारा पुष्टि की गई दस्तावेज़ OCR जानकारी (केवल पढ़ा गया टेक्स्ट, सत्यापन नहीं):\n'+ocr);setState(() { msgs.add(['user',userText]); sending=true; attachedImage=null; attachedImageName=null; pendingOcrText=null; });input.clear();await _persistConversation();try{final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();String? answer;final prefs=await SharedPreferences.getInstance();final workerUrl=(prefs.getString('zing_ai_worker_url')??defaultZingWorkerUrl).trim();
-final uri=Uri.tryParse(workerUrl);
-if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('worker-url-invalid');
-final client=io.HttpClient()..connectionTimeout=const Duration(seconds:25);
-try{
-  final req=await client.postUrl(uri);
-  req.headers.contentType=io.ContentType.json;
-  req.write(jsonEncode({'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList()}));
-  final res=await req.close().timeout(const Duration(seconds:40));
-  final body=await res.transform(utf8.decoder).join();
-  final decoded=jsonDecode(body);
-  if(res.statusCode<200||res.statusCode>=300){
-    final detail=(decoded is Map?decoded['error']:null)?.toString();
-    throw Exception(detail??'worker-http-${res.statusCode}');
+class _ChatPageState extends State<ChatPage>{final input=TextEditingController();final msgs=<List<String>>[];final picker=ImagePicker();Uint8List? attachedImage;String? attachedImageName;String? pendingOcrText;bool sending=false;io.HttpClient? _activeClient;bool _stopRequested=false;String? _lastFailedPrompt;Uint8List? _lastFailedImage;String? _lastFailedImageName;void stopSending(){_stopRequested=true;_activeClient?.close(force:true);}@override void initState(){super.initState();_restoreConversation();}Future<void> _restoreConversation() async {final saved=await ChatMemory.loadCurrent();if(!mounted||saved.isEmpty)return;try{final decoded=jsonDecode(saved) as List<dynamic>;setState((){msgs..clear()..addAll(decoded.map((x)=>(x as List<dynamic>).map((v)=>v.toString()).toList()));});}catch(_){}}Future<void> _persistConversation() async {await ChatMemory.saveCurrent(jsonEncode(msgs));}@override void dispose(){input.dispose();super.dispose();}Future<void> send([String? preset, bool retryExisting=false]) async {
+  final prompt=(preset??input.text).trim();
+  final imageBytes=retryExisting?_lastFailedImage:attachedImage;
+  final imageName=retryExisting?_lastFailedImageName:attachedImageName;
+  final ocr=retryExisting?null:pendingOcrText;
+  if((prompt.isEmpty&&imageBytes==null&&ocr==null)||sending)return;
+  final userText=retryExisting?prompt:
+      (prompt.isEmpty?'इस दस्तावेज़/तस्वीर को पढ़कर समझाओ।':prompt)+
+      (ocr==null?'':'\n\nयूज़र द्वारा पुष्टि की गई OCR जानकारी (केवल पढ़ा गया टेक्स्ट, सत्यापन नहीं):\n'+ocr);
+  _stopRequested=false;
+  setState(() {
+    if(retryExisting&&msgs.isNotEmpty&&msgs.last[0]=='ai'&&
+       (msgs.last[1].startsWith('Zing AI से जवाब नहीं मिल पाया:')||msgs.last[1]=='आपने अनुरोध रोक दिया।')) {
+      msgs.removeLast();
+    }
+    if(!retryExisting)msgs.add(['user',userText]);
+    sending=true;
+    attachedImage=null;
+    attachedImageName=null;
+    pendingOcrText=null;
+  });
+  input.clear();
+  await _persistConversation();
+  try {
+    final recent=msgs.skip(msgs.length>20?msgs.length-20:0).toList();
+    final prefs=await SharedPreferences.getInstance();
+    final workerUrl=(prefs.getString('zing_ai_worker_url')??defaultZingWorkerUrl).trim();
+    final uri=Uri.tryParse(workerUrl);
+    if(uri==null||uri.scheme!='https'||uri.host.isEmpty)throw Exception('सुरक्षित HTTPS AI server URL उपलब्ध नहीं है।');
+    final payload=<String,dynamic>{
+      'messages':recent.map((m)=>{'role':m[0]=='ai'?'assistant':'user','text':m[1]}).toList(),
+      'language':prefs.getString('zing_language')??'auto',
+    };
+    if(imageBytes!=null) {
+      if(imageBytes.length>5*1024*1024)throw Exception('तस्वीर 5 MB से बड़ी है। कृपया छोटी JPG/PNG तस्वीर चुनें।');
+      final ext=(imageName??'').toLowerCase().split('.').last;
+      final isPdf=ext=='pdf'||(imageBytes.length>=5&&ascii.decode(imageBytes.take(5).toList(),allowInvalid:true)=='%PDF-');
+      final mimeType=isPdf?'application/pdf':ext=='png'?'image/png':ext=='webp'?'image/webp':'image/jpeg';
+      payload['image']={'mimeType':mimeType,'data':base64Encode(imageBytes)};
+    }
+    final client=io.HttpClient()..connectionTimeout=const Duration(seconds:25);
+    _activeClient=client;
+    try {
+      final req=await client.postUrl(uri);
+      req.headers.contentType=io.ContentType.json;
+      req.write(jsonEncode(payload));
+      final res=await req.close().timeout(const Duration(seconds:60));
+      final body=await res.transform(utf8.decoder).join();
+      dynamic decoded;
+      try{decoded=jsonDecode(body);}catch(_){throw Exception('AI server ने पढ़ने योग्य जवाब नहीं दिया (HTTP ${res.statusCode}).');}
+      if(res.statusCode<200||res.statusCode>=300) {
+        final detail=(decoded is Map?decoded['error']:null)?.toString();
+        throw Exception(detail??'AI server error (HTTP ${res.statusCode}).');
+      }
+      final answer=(decoded is Map?decoded['answer']:null)?.toString().trim();
+      if(answer==null||answer.isEmpty)throw Exception('AI से खाली जवाब मिला। कृपया दोबारा कोशिश करें।');
+      _lastFailedPrompt=null;_lastFailedImage=null;_lastFailedImageName=null;
+      if(mounted){setState(()=>msgs.add(['ai',answer]));await _persistConversation();}
+    } finally {
+      _activeClient=null;
+      client.close(force:true);
+    }
+  } catch(e) {
+    _lastFailedPrompt=userText;_lastFailedImage=imageBytes;_lastFailedImageName=imageName;
+    if(mounted) {
+      final message=_stopRequested?'आपने अनुरोध रोक दिया।':'Zing AI से जवाब नहीं मिल पाया: ${e.toString().replaceFirst('Exception: ','')}';
+      setState(()=>msgs.add(['ai',message]));
+      await _persistConversation();
+    }
+  } finally {
+    _activeClient=null;
+    if(mounted)setState(()=>sending=false);
   }
-  answer=(decoded is Map?decoded['answer']:null)?.toString().trim();
-}finally{client.close(force:true);}
-if(answer==null||answer.isEmpty)throw Exception('empty-answer');if(mounted){setState(()=>msgs.add(['ai',answer!]));await _persistConversation();}}on FirebaseException catch(e){final message='AI request failed (${e.code}). Zing Zone Worker connection aur internet check karna hoga.';if(mounted){setState(()=>msgs.add(['ai',message]));await _persistConversation();}}catch(e){final message='Zing AI server error: $e';if(mounted){setState(()=>msgs.add(['ai',message]));await _persistConversation();}}finally{if(mounted)setState(()=>sending=false);}}Future<void> attachImage() async {
+}
+Future<void> attachImage() async {
   final choice=await showModalBottomSheet<String>(context:context,showDragHandle:true,builder:(ctx)=>SafeArea(child:Column(mainAxisSize:MainAxisSize.min,children:[
-    ListTile(leading:const Icon(Icons.photo_library_outlined),title:const Text('तस्वीर चुनें'),onTap:()=>Navigator.pop(ctx,'image')),
+    ListTile(leading:const Icon(Icons.photo_library_outlined),title:const Text('गैलरी से तस्वीर चुनें'),onTap:()=>Navigator.pop(ctx,'gallery')),
+    ListTile(leading:const Icon(Icons.camera_alt_outlined),title:const Text('कैमरा से तस्वीर लें'),onTap:()=>Navigator.pop(ctx,'camera')),
     ListTile(leading:const Icon(Icons.picture_as_pdf_outlined),title:const Text('PDF दस्तावेज़ चुनें'),onTap:()=>Navigator.pop(ctx,'pdf')),
   ])));
   if(choice==null)return;
   try{
-    if(choice=='image'){
-      final file=await picker.pickImage(source:ImageSource.gallery,maxWidth:2200,maxHeight:2200,imageQuality:92);
+    if(choice=='gallery'||choice=='camera'){
+      final file=await picker.pickImage(source:choice=='camera'?ImageSource.camera:ImageSource.gallery,maxWidth:2200,maxHeight:2200,imageQuality:92);
       if(file==null||!mounted)return;
       final bytes=await file.readAsBytes();
+      if(bytes.isEmpty)throw Exception('चुनी गई तस्वीर खाली है। दूसरी तस्वीर चुनें।');
+      if(bytes.length>5*1024*1024)throw Exception('तस्वीर 5 MB से छोटी रखें।');
       setState(()=>sending=true);
-      final text=await _ocrImagePath(file.path);
+      String confirmed='';
+      try {
+        final text=await _ocrImagePath(file.path);
+        if(text.trim().isNotEmpty&&mounted) confirmed=await _reviewOcr(file.name,text);
+      } catch (_) {
+        // OCR is optional: the original image must still be sent to Gemini vision.
+      }
       if(!mounted)return;
-      final confirmed=await _reviewOcr(file.name,text);
-      if(!mounted||confirmed.isEmpty)return;
-      setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed; });
+      setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed.isEmpty?null:confirmed; });
     }else{
       final picked=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf'],withData:true);
       if(picked==null||picked.files.isEmpty||!mounted)return;
       final file=picked.files.single;
-      if(file.size>20*1024*1024)throw Exception('PDF 20 MB से छोटा रखें।');
+      if(file.size>5*1024*1024)throw Exception('PDF 5 MB से छोटा रखें ताकि AI उसे सीधे समझ सके।');
       final bytes=file.bytes;
-      if(bytes==null)throw Exception('PDF bytes unavailable');
+      if(bytes==null||bytes.isEmpty)throw Exception('PDF bytes unavailable');
       setState(()=>sending=true);
-      final text=await _ocrPdf(bytes);
+      String confirmed='';
+      try {
+        final text=await _ocrPdf(bytes);
+        if(text.trim().isNotEmpty&&mounted) confirmed=await _reviewOcr(file.name,text);
+      } catch (_) {
+        // Keep the original PDF; Gemini can inspect the PDF directly.
+      }
       if(!mounted)return;
-      final confirmed=await _reviewOcr(file.name,text);
-      if(!mounted||confirmed.isEmpty)return;
-      setState(() { attachedImage=null; attachedImageName=file.name; pendingOcrText=confirmed; });
+      setState(() { attachedImage=bytes; attachedImageName=file.name; pendingOcrText=confirmed.isEmpty?null:confirmed; });
     }
   }catch(e){
     if(mounted)note(context,'दस्तावेज़ पढ़ने में समस्या हुई: '+e.toString().replaceFirst('Exception: ',''));
@@ -413,7 +509,7 @@ ListTile(leading:const Icon(Icons.save_outlined,color:blue),title:const Text('Sa
             ),
           ),
         )
-      : ListView(padding:const EdgeInsets.all(16),children:msgs.map((m){final user=m[0]=='user';return Align(alignment:user?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:330),margin:const EdgeInsets.only(bottom:12),padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:user?blue:const Color(0xFFF1F3F8),borderRadius:BorderRadius.only(topLeft:const Radius.circular(19),topRight:const Radius.circular(19),bottomLeft:Radius.circular(user?19:5),bottomRight:Radius.circular(user?5:19))),child:Text(m[1],style:TextStyle(color:user?Colors.white:navy,height:1.5,fontSize:14))));}).toList())),Container(padding:const EdgeInsets.fromLTRB(9,8,9,12),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:15,offset:Offset(0,-4))]),child:Column(children:[if(attachedImageName!=null) Padding(padding:const EdgeInsets.only(bottom:8),child:Row(children:[Icon(pendingOcrText!=null?Icons.document_scanner_outlined:Icons.image_outlined,color:blue),Expanded(child:Text(attachedImageName??'दस्तावेज़ जुड़ा है',maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>setState(() { attachedImage=null; attachedImageName=null; pendingOcrText=null; }),icon:const Icon(Icons.close))])),Row(children:[IconButton(tooltip:'Attach image or form photo',onPressed:sending?null:attachImage,icon:const Icon(Icons.add_circle_outline)),Expanded(child:TextField(controller:input,minLines:1,maxLines:5,onSubmitted:(_)=>send(),decoration:InputDecoration(hintText:'Message Zing AI…',filled:true,fillColor:pale,border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none)))),Container(decoration:BoxDecoration(color:blue,borderRadius:BorderRadius.circular(15)),child:IconButton(onPressed:send,icon:const Icon(Icons.arrow_upward,color:Colors.white)))]),Text(sending?'Zing AI is thinking…':'AI availability depends on Firebase AI Logic setup and quota.',style:const TextStyle(fontSize:10,color:muted))]))])));}
+      : ListView(padding:const EdgeInsets.all(16),children:msgs.map((m){final user=m[0]=='user';return Align(alignment:user?Alignment.centerRight:Alignment.centerLeft,child:Container(constraints:const BoxConstraints(maxWidth:330),margin:const EdgeInsets.only(bottom:12),padding:const EdgeInsets.all(14),decoration:BoxDecoration(color:user?blue:const Color(0xFFF1F3F8),borderRadius:BorderRadius.only(topLeft:const Radius.circular(19),topRight:const Radius.circular(19),bottomLeft:Radius.circular(user?19:5),bottomRight:Radius.circular(user?5:19))),child:Text(m[1],style:TextStyle(color:user?Colors.white:navy,height:1.5,fontSize:14))));}).toList())),Container(padding:const EdgeInsets.fromLTRB(9,8,9,12),decoration:const BoxDecoration(color:Colors.white,boxShadow:[BoxShadow(color:Color(0x10000000),blurRadius:15,offset:Offset(0,-4))]),child:Column(children:[if(attachedImageName!=null) Padding(padding:const EdgeInsets.only(bottom:8),child:Row(children:[Icon(pendingOcrText!=null?Icons.document_scanner_outlined:Icons.image_outlined,color:blue),Expanded(child:Text(attachedImageName??'दस्तावेज़ जुड़ा है',maxLines:1,overflow:TextOverflow.ellipsis)),IconButton(onPressed:()=>setState(() { attachedImage=null; attachedImageName=null; pendingOcrText=null; }),icon:const Icon(Icons.close))])),Row(children:[IconButton(tooltip:'Attach image or form photo',onPressed:sending?null:attachImage,icon:const Icon(Icons.add_circle_outline)),Expanded(child:TextField(controller:input,minLines:1,maxLines:5,onSubmitted:(_)=>send(),decoration:InputDecoration(hintText:'Message Zing AI…',filled:true,fillColor:pale,border:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none),enabledBorder:OutlineInputBorder(borderRadius:BorderRadius.circular(24),borderSide:BorderSide.none)))),Container(decoration:BoxDecoration(color:blue,borderRadius:BorderRadius.circular(15)),child:IconButton(onPressed:sending?stopSending:send,icon:Icon(sending?Icons.stop_rounded:Icons.arrow_upward,color:Colors.white)))]),if(_lastFailedPrompt!=null) Align(alignment:Alignment.centerLeft,child:TextButton.icon(onPressed:sending?null:()=>send(_lastFailedPrompt,true),icon:const Icon(Icons.refresh_rounded,size:16),label:const Text('Retry last request'))),Text(sending?'Zing AI is thinking…':'Zing AI • secure server connection',style:const TextStyle(fontSize:10,color:muted))]))])));}
 
 class PortalBrowserPage extends StatefulWidget {
   const PortalBrowserPage({super.key});
@@ -748,21 +844,19 @@ class AppSettingsPage extends StatefulWidget {
 }
 class _AppSettingsPageState extends State<AppSettingsPage> {
   final workerUrlController = TextEditingController();
-  @override void initState() { super.initState(); _loadWorkerUrl(); }
-  Future<void> _loadWorkerUrl() async { final p=await SharedPreferences.getInstance(); workerUrlController.text=p.getString('zing_ai_worker_url')??defaultZingWorkerUrl; }
+  String language = 'auto';
+  @override void initState() { super.initState(); _loadPreferences(); }
+  Future<void> _loadPreferences() async { final p=await SharedPreferences.getInstance(); if(!mounted)return; setState(() { workerUrlController.text=p.getString('zing_ai_worker_url')??defaultZingWorkerUrl; language=p.getString('zing_language')??'auto'; }); }
+  Future<void> _selectLanguage() async { final picked=await showModalBottomSheet<String>(context:context,isScrollControlled:true,showDragHandle:true,builder:(ctx)=>SafeArea(child:SizedBox(height:MediaQuery.of(ctx).size.height*0.72,child:Column(children:[const Padding(padding:EdgeInsets.all(16),child:Text('अपनी भाषा चुनें / Choose language',style:TextStyle(fontSize:17,fontWeight:FontWeight.w900,color:navy))),const Padding(padding:EdgeInsets.fromLTRB(16,0,16,12),child:Text('Auto mode में Zing AI आपके संदेश की भाषा और लिपि पहचानता है।',style:TextStyle(color:muted,fontSize:12))),Expanded(child:ListView(children:zingLanguages.entries.map((entry)=>ListTile(title:Text(entry.value),trailing:entry.key==language?const Icon(Icons.check,color:blue):null,onTap:()=>Navigator.pop(ctx,entry.key))).toList()))])))); if(picked==null)return; final p=await SharedPreferences.getInstance(); await p.setString('zing_language',picked); if(mounted){setState(()=>language=picked);note(context,'भाषा सेव हो गई। अगला AI जवाब इसी भाषा में आएगा।');} }
   @override void dispose() { workerUrlController.dispose(); super.dispose(); }
   Future<void> _editWorkerUrl() async { final ctl=TextEditingController(text:workerUrlController.text); final picked=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Free AI server URL'),content:TextField(controller:ctl,keyboardType:TextInputType.url,autocorrect:false,decoration:const InputDecoration(hintText:'https://your-worker.workers.dev',helperText:'Cloudflare Worker ka deployed HTTPS URL')),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,ctl.text.trim()),child:const Text('Save'))])); if(picked!=null){final v=picked.trim();if(v.isNotEmpty&&(!v.startsWith('https://')||Uri.tryParse(v)?.host.isEmpty==true)){if(mounted)note(context,'Valid HTTPS URL enter karo.');return;}final p=await SharedPreferences.getInstance();if(v.isEmpty){await p.remove('zing_ai_worker_url');}else{await p.setString('zing_ai_worker_url',v);}workerUrlController.text=v;if(mounted){setState((){});note(context,v.isEmpty?'Default Zing AI server restored.':'Zing AI server URL saved.');}}}
   bool biometric = false, compact = false, sounds = true, haptics = true, accessibility = false;
-  String language = 'हिन्दी + English';
   @override Widget build(BuildContext c) => Scaffold(
     appBar: AppBar(title: const Text('Settings')),
     body: ListView(padding: const EdgeInsets.all(16), children: [
       const Text('APP PREFERENCES', style: TextStyle(fontWeight: FontWeight.w900, color: muted, letterSpacing: 1)),
       const SizedBox(height: 8),
-      ListTile(leading: const Icon(Icons.language, color: blue), title: const Text('App language'), subtitle: Text(language), trailing: const Icon(Icons.chevron_right), onTap: () async {
-        final picked = await showModalBottomSheet<String>(context: c, builder: (ctx) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: ['हिन्दी + English','हिन्दी','English','ગુજરાતી','ਪੰਜਾਬੀ'].map((v) => ListTile(title: Text(v), trailing: v == language ? const Icon(Icons.check,color:blue) : null, onTap: () => Navigator.pop(ctx,v))).toList())));
-        if (picked != null) setState(() => language = picked);
-      }),
+      ListTile(leading: const Icon(Icons.language, color: blue), title: const Text('App / AI response language'), subtitle: Text(zingLanguageLabel(language)), trailing: const Icon(Icons.chevron_right), onTap: _selectLanguage),
       SwitchListTile(value: sounds, onChanged: (v)=>setState(()=>sounds=v), secondary: const Icon(Icons.volume_up_outlined), title: const Text('Sound effects')),
       SwitchListTile(value: haptics, onChanged: (v)=>setState(()=>haptics=v), secondary: const Icon(Icons.vibration), title: const Text('Haptic feedback')),
       SwitchListTile(value: compact, onChanged: (v)=>setState(()=>compact=v), secondary: const Icon(Icons.view_agenda_outlined), title: const Text('Compact layout')),
@@ -776,7 +870,7 @@ class _AppSettingsPageState extends State<AppSettingsPage> {
       SwitchListTile(value: biometric, onChanged: (v)=>setState(()=>biometric=v), secondary: const Icon(Icons.fingerprint), title: const Text('Biometric unlock'), subtitle: const Text('Preference preview; device authentication is not connected.')),
       ListTile(leading: const Icon(Icons.privacy_tip_outlined), title: const Text('Privacy controls'), subtitle: const Text('Review permissions and data handling'), onTap: ()=>page(c,const PlainPage(title:'Privacy controls'))),
       ListTile(leading: const Icon(Icons.help_outline), title: const Text('Help & support'), onTap: ()=>page(c,const PlainPage(title:'Help & support'))),
-      const Padding(padding: EdgeInsets.all(8), child: Text('These preferences currently apply only in this open session. Persistent settings will be added with local storage/backend.',style:TextStyle(fontSize:11,color:muted))),
+      const Padding(padding: EdgeInsets.all(8), child: Text('Language selection is saved on this device and sent with AI requests. Other preview preferences apply only in this open session.',style:TextStyle(fontSize:11,color:muted))),
     ]),
   );
 }

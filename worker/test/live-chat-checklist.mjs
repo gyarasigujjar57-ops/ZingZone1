@@ -43,9 +43,9 @@ for (const [name,payload,check] of cases) {
         body:JSON.stringify(payload)
       });
       data=await response.json();
-      if (response.status!==429 || attempt===3) break;
-      console.log("RATE LIMIT "+name+"; retrying after "+(attempt*15000)+" ms");
-      await new Promise(resolve=>setTimeout(resolve,attempt*15000));
+      if ((response.status!==429 && !(response.status>=500 && data.retryable===true)) || attempt===3) break;
+      console.log("RETRYABLE AI CAPACITY/QUOTA ERROR "+name+"; retrying after "+(attempt*12000)+" ms");
+      await new Promise(resolve=>setTimeout(resolve,attempt*12000));
     }
     if (!response.ok) throw new Error("HTTP "+response.status+": "+(data.error||"request failed"));
     if (typeof data.answer!=="string" || !data.answer.trim()) throw new Error("empty answer");

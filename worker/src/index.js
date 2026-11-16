@@ -67,7 +67,7 @@ export default {
     try {
       // Try a lighter stable fallback when a model-specific quota/capacity limit is hit.
       // A 429 on one model must not prevent trying the next supported model.
-      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
+      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
       let lastMessage = "Gemini API request failed";
       let lastStatus = 503;
       for (const model of models) {

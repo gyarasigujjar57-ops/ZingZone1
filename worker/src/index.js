@@ -67,7 +67,7 @@ export default {
     try {
       // Try a lighter stable fallback when a model-specific quota/capacity limit is hit.
       // A 429 on one model must not prevent trying the next supported model.
-      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"];
+      const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
       let lastMessage = "Gemini API request failed";
       let lastStatus = 503;
       for (const model of models) {
@@ -109,8 +109,10 @@ export default {
         }
         lastMessage = data?.error?.message || "Gemini API request failed";
         lastStatus = response.status;
-        if (response.status === 429 || response.status === 404 || [500, 502, 503, 504].includes(response.status)) {
-          // Continue to the next model; quota and capacity can differ by model.
+        const modelAccessRestricted = response.status === 400 &&
+          /no longer available to new users|not available to new users|model .*not available/i.test(lastMessage);
+        if (response.status === 429 || response.status === 404 || modelAccessRestricted || [500, 502, 503, 504].includes(response.status)) {
+          // Continue to the next supported model; access, quota and capacity can differ by model.
           continue;
         }
         if (![500, 502, 503, 504].includes(response.status)) {

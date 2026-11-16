@@ -83,7 +83,7 @@ test("continues through model-not-found responses and returns useful retryable q
       return new Response(JSON.stringify({error:{message:"model unavailable"}}),{status:calls===1?404:429});
     };
     const response=await worker.fetch(request({messages:[{role:"user",text:"Hello"}]}),{GEMINI_API_KEY:"test-secret"});
-    assert.equal(calls,2);
+    assert.equal(calls,3);
     assert.equal(response.status,429);
     const data=await response.json();
     assert.equal(data.retryable,true);
@@ -115,4 +115,5 @@ test("does not retain a Gemini 2.5 model in the fallback configuration",async()=
   const source=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../src/index.js",import.meta.url),"utf8"));
   assert.equal(source.includes("gemini-2.5-flash-lite"),false);
   assert.equal(source.includes("gemini-3.5-flash-lite"),true);
+  assert.equal(source.includes("gemini-3.1-flash-lite"),true);
 });

@@ -83,7 +83,7 @@ test("continues through model-not-found responses and returns useful retryable q
       return new Response(JSON.stringify({error:{message:"model unavailable"}}),{status:calls===1?404:429});
     };
     const response=await worker.fetch(request({messages:[{role:"user",text:"Hello"}]}),{GEMINI_API_KEY:"test-secret"});
-    assert.equal(calls,3);
+    assert.equal(calls,2);
     assert.equal(response.status,429);
     const data=await response.json();
     assert.equal(data.retryable,true);
@@ -94,4 +94,25 @@ test("continues through model-not-found responses and returns useful retryable q
 test("rejects an assistant message as the final turn",async()=>{
   const response=await worker.fetch(request({messages:[{role:"assistant",text:"hello"}]}),{GEMINI_API_KEY:"test-secret"});
   assert.equal(response.status,400);
+});
+
+test("falls back when Gemini restricts a model for new projects",async()=>{
+  await withFetch(async()=>{
+    let calls=0;
+    globalThis.fetch=async()=>{
+      calls++;
+      if(calls===1) return new Response(JSON.stringify({error:{message:"This model is no longer available to new users"}}),{status:400});
+      return geminiReply("Supported fallback answered.");
+    };
+    const response=await worker.fetch(request({messages:[{role:"user",text:"Hello"}]}),{GEMINI_API_KEY:"test-secret"});
+    assert.equal(response.status,200);
+    assert.equal(calls,2);
+    assert.equal((await response.json()).answer,"Supported fallback answered.");
+  });
+});
+
+test("does not retain a Gemini 2.5 model in the fallback configuration",async()=>{
+  const source=await import("node:fs/promises").then(fs=>fs.readFile(new URL("../src/index.js",import.meta.url),"utf8"));
+  assert.doesNotMatch(source,/gemini-2\\.5-flash-lite/);
+  assert.match(source,/gemini-3\\.5-flash-lite/);
 });
